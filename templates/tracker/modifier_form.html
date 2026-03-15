@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if mode == 'update' %}Modifier le modificateur{% else %}Nouveau modificateur{% endif %}{% endblock %}
+
+{% block content %}
+<article class="auth-card">
+    <h1>{% if mode == 'update' %}Modifier le modificateur{% else %}Ajouter un modificateur{% endif %}</h1>
+    <p>Projet : <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">{% if mode == 'update' %}Mettre à jour{% else %}Ajouter{% endif %}</button>
+            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

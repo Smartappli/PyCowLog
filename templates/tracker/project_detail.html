@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>{{ project.name }}</h1>
+        <p>{{ project.description|default:'Aucune description.' }}</p>
+        <p class="muted">Propriétaire : {{ project.owner.username }}</p>
+        <p class="muted">Collaborateurs :
+            {% for collaborator in project.collaborators.all %}
+                {{ collaborator.username }}{% if not forloop.last %}, {% endif %}
+            {% empty %}
+                aucun
+            {% endfor %}
+        </p>
+    </div>
+    <div class="action-stack">
+        <a href="{% url 'tracker:project_analytics' project.pk %}" role="button">Analytiques</a>
+        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button" class="secondary">Export XLSX</a>
+        <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="secondary">Exporter l'éthogramme</a>
+        {% if is_owner %}
+            <a href="{% url 'tracker:project_import_ethogram' project.pk %}" role="button" class="secondary">Importer un éthogramme</a>
+            <a href="{% url 'tracker:project_update' project.pk %}" role="button" class="contrast">Paramètres</a>
+            <a href="{% url 'tracker:category_create' project.pk %}" role="button" class="secondary">Nouvelle catégorie</a>
+            <a href="{% url 'tracker:modifier_create' project.pk %}" role="button" class="secondary">Nouveau modificateur</a>
+            <a href="{% url 'tracker:behavior_create' project.pk %}" role="button">Nouveau comportement</a>
+            <a href="{% url 'tracker:video_create' project.pk %}" role="button" class="secondary">Nouvelle vidéo</a>
+        {% endif %}
+        <a href="{% url 'tracker:session_create' project.pk %}" role="button" class="contrast">Nouvelle session</a>
+    </div>
+</header>
+
+<section class="card-grid dashboard-grid">
+    <article>
+        <h3>Vue rapide</h3>
+        <div class="stats-row stacked">
+            <span>{{ analytics.session_count }} sessions</span>
+            <span>{{ analytics.video_count }} vidéos</span>
+            <span>{{ analytics.behavior_count }} comportements</span>
+            <span>{{ analytics.event_count }} événements</span>
+            <span>{{ analytics.observed_span_seconds }} s observées</span>
+        </div>
+    </article>
+</section>
+
+<div class="grid two-columns project-grid-v4">
+    <section>
+        <article>
+            <div class="section-headline">
+                <h3>Catégories</h3>
+            </div>
+            <ul class="managed-list">
+                {% for category in project.categories.all %}
+                    <li>
+                        <div>
+                            <span class="behavior-badge" style="background-color: {{ category.color }};"></span>
+                            {{ category.name }}
+                        </div>
+                        {% if is_owner %}
+                            <div class="mini-actions">
+                                <a href="{% url 'tracker:category_update' category.pk %}">Modifier</a>
+                                <a href="{% url 'tracker:category_delete' category.pk %}">Supprimer</a>
+                            </div>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li>Aucune catégorie.</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Modificateurs</h3>
+            </div>
+            <ul class="managed-list">
+                {% for modifier in project.modifiers.all %}
+                    <li>
+                        <div><kbd>{{ modifier.key_binding }}</kbd> {{ modifier.name }}{% if modifier.description %} — {{ modifier.description }}{% endif %}</div>
+                        {% if is_owner %}
+                            <div class="mini-actions">
+                                <a href="{% url 'tracker:modifier_update' modifier.pk %}">Modifier</a>
+                                <a href="{% url 'tracker:modifier_delete' modifier.pk %}">Supprimer</a>
+                            </div>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li>Aucun modificateur.</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Comportements</h3>
+            </div>
+            <ul class="managed-list">
+                {% for behavior in project.behaviors.all %}
+                    <li>
+                        <div>
+                            <span class="behavior-badge" style="background-color: {{ behavior.color }};"></span>
+                            <strong>{{ behavior.name }}</strong>
+                            <span class="pill">{{ behavior.mode }}</span>
+                            {% if behavior.category %}<span class="muted">{{ behavior.category.name }}</span>{% endif %}
+                            <span><kbd>{{ behavior.key_binding }}</kbd></span>
+                        </div>
+                        {% if is_owner %}
+                            <div class="mini-actions">
+                                <a href="{% url 'tracker:behavior_update' behavior.pk %}">Modifier</a>
+                                <a href="{% url 'tracker:behavior_delete' behavior.pk %}">Supprimer</a>
+                            </div>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li>Aucun comportement.</li>
+                {% endfor %}
+            </ul>
+        </article>
+    </section>
+
+    <section>
+        <article>
+            <div class="section-headline">
+                <h3>Vidéos</h3>
+            </div>
+            <ul class="managed-list">
+                {% for video in project.videos.all %}
+                    <li>
+                        <div>
+                            <strong>{{ video.title }}</strong>
+                            {% if video.notes %}<span class="muted">— {{ video.notes|truncatechars:80 }}</span>{% endif %}
+                        </div>
+                        {% if is_owner %}
+                            <div class="mini-actions">
+                                <a href="{% url 'tracker:video_update' video.pk %}">Modifier</a>
+                                <a href="{% url 'tracker:video_delete' video.pk %}">Supprimer</a>
+                            </div>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li>Aucune vidéo.</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Sessions</h3>
+            </div>
+            <ul class="managed-list">
+                {% for session in project.sessions.all %}
+                    <li>
+                        <div>
+                            <a href="{{ session.get_absolute_url }}"><strong>{{ session.title }}</strong></a>
+                            — {{ session.video.title }}
+                            <span class="muted">({{ session.video_links.count }} vidéo{{ session.video_links.count|pluralize }})</span>
+                            {% if session.observer %}<span class="muted">· {{ session.observer.username }}</span>{% endif %}
+                        </div>
+                        <div class="mini-actions">
+                            <a href="{% url 'tracker:session_update' session.pk %}">Modifier</a>
+                            <a href="{% url 'tracker:session_delete' session.pk %}">Supprimer</a>
+                        </div>
+                    </li>
+                {% empty %}
+                    <li>Aucune session.</li>
+                {% endfor %}
+            </ul>
+        </article>
+    </section>
+</div>
+{% endblock %}

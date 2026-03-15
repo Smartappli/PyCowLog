@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    {% load static %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}CowLog Django V4{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="{% static 'tracker/app.css' %}">
+</head>
+<body>
+    <main class="container">
+        <nav>
+            <ul>
+                <li><strong><a href="{% url 'tracker:home' %}">CowLog Django V4</a></strong></li>
+            </ul>
+            <ul>
+                {% if user.is_authenticated %}
+                    <li><a href="{% url 'tracker:project_create' %}">Nouveau projet</a></li>
+                    <li><a href="/admin/">Admin</a></li>
+                    <li><span class="muted">{{ user.username }}</span></li>
+                    <li>
+                        <form action="{% url 'logout' %}" method="post" class="inline-form">
+                            {% csrf_token %}
+                            <button type="submit" class="secondary">Déconnexion</button>
+                        </form>
+                    </li>
+                {% else %}
+                    <li><a href="{% url 'login' %}">Connexion</a></li>
+                    <li><a href="{% url 'signup' %}">Inscription</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        {% if messages %}
+            {% for message in messages %}
+                <article class="message {{ message.tags }}">{{ message }}</article>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

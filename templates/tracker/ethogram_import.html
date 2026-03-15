@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Importer un éthogramme{% endblock %}
+
+{% block content %}
+<article class="auth-card wide-card">
+    <header>
+        <h1>Importer un éthogramme</h1>
+        <p>Projet cible : <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+    </header>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">Importer</button>
+            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Annuler</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

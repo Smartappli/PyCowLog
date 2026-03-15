@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block title %}Mes projets{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>Mes projets CowLog</h1>
+        <p>Version 4 : multi-vidéo synchronisée, gestion complète de l’éthogramme et exports analytiques projet.</p>
+    </div>
+    <a href="{% url 'tracker:project_create' %}" role="button">Nouveau projet</a>
+</header>
+
+<section class="card-grid">
+    {% for project in projects %}
+        <article class="project-card">
+            <div class="project-card-top">
+                <h3><a href="{{ project.get_absolute_url }}">{{ project.name }}</a></h3>
+                {% if project.owner_id == user.id %}
+                    <span class="pill">propriétaire</span>
+                {% else %}
+                    <span class="pill">collaborateur</span>
+                {% endif %}
+            </div>
+            <p>{{ project.description|default:'Aucune description.' }}</p>
+            <p class="muted">Propriétaire : {{ project.owner.username }}</p>
+            <div class="stats-row">
+                <span>{{ project.categories.count }} catégories</span>
+                <span>{{ project.modifiers.count }} modificateurs</span>
+                <span>{{ project.behaviors.count }} comportements</span>
+                <span>{{ project.videos.count }} vidéos</span>
+                <span>{{ project.sessions.count }} sessions</span>
+            </div>
+            <div class="action-stack compact">
+                <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Ouvrir</a>
+                <a href="{% url 'tracker:project_analytics' project.pk %}" role="button" class="outline">Analytiques</a>
+                <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="outline">Éthogramme JSON</a>
+            </div>
+        </article>
+    {% empty %}
+        <article>
+            <h3>Aucun projet</h3>
+            <p>Crée ton premier projet pour commencer à coder des comportements à partir de vidéos.</p>
+        </article>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,514 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ session.title }}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>{{ session.title }}</h1>
+        <p>Projet : <a href="{{ session.project.get_absolute_url }}">{{ session.project.name }}</a> · Vidéo principale : {{ session.video.title }}</p>
+        <p class="muted">Observateur : {{ session.observer.username|default:'non défini' }} · Vitesse : {{ session.playback_rate }}x · {{ synced_videos|length }} vidéo{{ synced_videos|length|pluralize }} synchronisée{{ synced_videos|length|pluralize }}</p>
+    </div>
+    <div class="action-stack compact">
+        <a href="{% url 'tracker:session_update' session.pk %}" role="button" class="secondary">Paramètres</a>
+        <a href="{% url 'tracker:session_export_csv' session.pk %}" role="button" class="secondary">CSV</a>
+        <a href="{% url 'tracker:session_export_json' session.pk %}" role="button" class="secondary">JSON</a>
+        <a href="{% url 'tracker:session_export_xlsx' session.pk %}" role="button">XLSX</a>
+    </div>
+</header>
+
+<div class="grid two-columns player-layout">
+    <section>
+        <article>
+            <h3>Lecteur principal</h3>
+            <video id="main-video" controls preload="metadata" class="session-video" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
+                <source src="{{ session.video.file.url }}">
+            </video>
+            <div class="video-controls-inline">
+                <button type="button" id="play-pause-btn" class="secondary">Lecture / pause</button>
+                <button type="button" id="back-2-btn" class="secondary">-2 s</button>
+                <button type="button" id="forward-2-btn" class="secondary">+2 s</button>
+                <button type="button" id="clear-modifiers-btn" class="secondary">Vider modificateurs</button>
+                <span id="video-time" class="pill large-pill">0.000 s</span>
+            </div>
+            {% if session.notes %}
+                <p class="muted">{{ session.notes }}</p>
+            {% endif %}
+        </article>
+
+        {% if synced_videos|length > 1 %}
+        <article>
+            <h3>Vidéos synchronisées</h3>
+            <div class="sync-grid">
+                {% for link in synced_videos %}
+                    {% if forloop.first %}{% else %}
+                    <div class="sync-card">
+                        <strong>{{ link.video.title }}</strong>
+                        <video class="session-video sync-video" preload="metadata" muted data-video-id="{{ link.video.id }}">
+                            <source src="{{ link.video.file.url }}">
+                        </video>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </article>
+        {% endif %}
+
+        <article>
+            <h3>Comportements</h3>
+            <div class="keyboard-hint">Touche du comportement = ajout auto · Alt = START forcé · Shift = STOP forcé</div>
+            <div class="behavior-list">
+                {% for behavior in behaviors %}
+                    <button
+                        type="button"
+                        class="behavior-button"
+                        data-behavior-id="{{ behavior.id }}"
+                        data-key="{{ behavior.key_binding|lower }}"
+                        data-mode="{{ behavior.mode }}"
+                        data-color="{{ behavior.color }}"
+                    >
+                        <span class="behavior-badge" style="background-color: {{ behavior.color }};"></span>
+                        <span>{{ behavior.name }}</span>
+                        <span class="pill">{{ behavior.mode }}</span>
+                        <kbd>{{ behavior.key_binding }}</kbd>
+                    </button>
+                {% empty %}
+                    <p>Aucun comportement.</p>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article>
+            <h3>Modificateurs</h3>
+            <div class="keyboard-hint">Touche du modificateur = active/désactive · Backspace = vider</div>
+            <div class="modifier-list">
+                {% for modifier in modifiers %}
+                    <button
+                        type="button"
+                        class="modifier-button"
+                        data-modifier-id="{{ modifier.id }}"
+                        data-key="{{ modifier.key_binding|lower }}"
+                    >
+                        <kbd>{{ modifier.key_binding }}</kbd>
+                        <span>{{ modifier.name }}</span>
+                    </button>
+                {% empty %}
+                    <p>Aucun modificateur.</p>
+                {% endfor %}
+            </div>
+            <p id="active-modifiers-output" class="muted">Aucun modificateur actif.</p>
+            <div id="active-states-container" class="state-container"></div>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Timeline</h3>
+                <span class="muted">Buckets d’1 minute</span>
+            </div>
+            <div id="timeline-grid" class="timeline-grid"></div>
+        </article>
+    </section>
+
+    <section>
+        <article>
+            <div class="section-headline">
+                <h3>Statistiques</h3>
+                <span class="pill">mise à jour dynamique</span>
+            </div>
+            <div class="stats-row stacked" id="summary-strip">
+                <span>{{ stats.session_event_count }} événements</span>
+                <span>{{ stats.point_event_count }} points</span>
+                <span>{{ stats.open_state_count }} états ouverts</span>
+                <span>{{ stats.observed_span_seconds }} s observées</span>
+            </div>
+            <div class="table-wrapper compact-table-wrapper">
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Comportement</th>
+                            <th>Mode</th>
+                            <th>Points</th>
+                            <th>Segments</th>
+                            <th>Durée</th>
+                            <th>%</th>
+                            <th>Ouvert</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Événements</h3>
+                <div class="mini-actions">
+                    <button type="button" id="refresh-events-btn" class="secondary">Rafraîchir</button>
+                </div>
+            </div>
+            <div class="table-wrapper compact-table-wrapper">
+                <table id="events-table">
+                    <thead>
+                        <tr>
+                            <th>Temps</th>
+                            <th>Comportement</th>
+                            <th>Type</th>
+                            <th>Modificateurs</th>
+                            <th>Commentaire</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </article>
+    </section>
+</div>
+
+{{ state_status|json_script:'state-status-data' }}
+{{ timeline_buckets|json_script:'timeline-data' }}
+
+<script>
+const sessionId = {{ session.id }};
+const mainVideo = document.getElementById('main-video');
+const syncVideos = [...document.querySelectorAll('.sync-video')];
+const behaviorButtons = [...document.querySelectorAll('.behavior-button')];
+const modifierButtons = [...document.querySelectorAll('.modifier-button')];
+const eventsTableBody = document.querySelector('#events-table tbody');
+const statsTableBody = document.querySelector('#stats-table tbody');
+const summaryStrip = document.getElementById('summary-strip');
+const activeModifiersOutput = document.getElementById('active-modifiers-output');
+const activeStatesContainer = document.getElementById('active-states-container');
+const timelineGrid = document.getElementById('timeline-grid');
+const videoTime = document.getElementById('video-time');
+const playPauseBtn = document.getElementById('play-pause-btn');
+const back2Btn = document.getElementById('back-2-btn');
+const forward2Btn = document.getElementById('forward-2-btn');
+const clearModifiersBtn = document.getElementById('clear-modifiers-btn');
+const refreshEventsBtn = document.getElementById('refresh-events-btn');
+function getCookie(name) {
+    return document.cookie.split('; ').find((row) => row.startsWith(`${name}=`))?.split('=')[1] || '';
+}
+const csrfToken = getCookie('csrftoken');
+
+let stateStatus = JSON.parse(document.getElementById('state-status-data').textContent);
+let timelineBuckets = JSON.parse(document.getElementById('timeline-data').textContent);
+let activeModifierIds = new Set();
+let syncing = false;
+
+function formatSeconds(value) {
+    const numeric = Number(value || 0);
+    return `${numeric.toFixed(3)} s`;
+}
+
+function renderModifierStates() {
+    const activeNames = [];
+    modifierButtons.forEach((button) => {
+        const modifierId = Number(button.dataset.modifierId);
+        const isActive = activeModifierIds.has(modifierId);
+        button.classList.toggle('is-active-modifier', isActive);
+        if (isActive) {
+            activeNames.push(button.textContent.trim());
+        }
+    });
+    activeModifiersOutput.textContent = activeNames.length ? `Actifs : ${activeNames.join(' · ')}` : 'Aucun modificateur actif.';
+}
+
+function renderActiveStates() {
+    const activeButtons = behaviorButtons.filter((button) => stateStatus[String(button.dataset.behaviorId)] || stateStatus[Number(button.dataset.behaviorId)]);
+    if (!activeButtons.length) {
+        activeStatesContainer.innerHTML = '<span class="muted">Aucun état actif.</span>';
+        return;
+    }
+    activeStatesContainer.innerHTML = activeButtons.map((button) => `
+        <span class="state-pill" style="border-color:${button.dataset.color};">
+            <span class="behavior-badge" style="background-color:${button.dataset.color};"></span>
+            ${button.querySelector('span:nth-child(2)').textContent}
+        </span>
+    `).join('');
+}
+
+function renderStats(stats) {
+    summaryStrip.innerHTML = `
+        <span>${stats.session_event_count} événements</span>
+        <span>${stats.point_event_count} points</span>
+        <span>${stats.open_state_count} états ouverts</span>
+        <span>${Number(stats.observed_span_seconds || 0).toFixed(3)} s observées</span>
+    `;
+
+    statsTableBody.innerHTML = stats.rows.map((row) => `
+        <tr>
+            <td>
+                <span class="behavior-badge" style="background-color:${row.color};"></span>
+                ${row.name}
+            </td>
+            <td>${row.mode}</td>
+            <td>${row.point_count}</td>
+            <td>${row.segment_count}</td>
+            <td>${Number(row.total_duration_seconds).toFixed(3)}</td>
+            <td>${Number(row.occupancy_percent || 0).toFixed(2)}%</td>
+            <td>${row.is_open ? 'oui' : 'non'}</td>
+        </tr>
+    `).join('');
+}
+
+function renderTimeline() {
+    if (!timelineBuckets.length) {
+        timelineGrid.innerHTML = '<p class="muted">Aucun point de timeline pour le moment.</p>';
+        return;
+    }
+    const maxEvents = Math.max(...timelineBuckets.map((bucket) => bucket.event_count), 1);
+    timelineGrid.innerHTML = timelineBuckets.map((bucket) => {
+        const height = bucket.event_count ? Math.max(16, Math.round((bucket.event_count / maxEvents) * 100)) : 10;
+        const labels = Object.entries(bucket.labels || {}).map(([name, count]) => `${name} (${count})`).join(' · ');
+        return `
+            <button type="button" class="timeline-bucket" data-seconds="${bucket.start_seconds}" title="${labels || 'Aucun événement'}">
+                <span class="timeline-bar" style="height:${height}px"></span>
+                <span class="timeline-label">${bucket.start_seconds}s</span>
+                <span class="timeline-count">${bucket.event_count}</span>
+            </button>
+        `;
+    }).join('');
+
+    timelineGrid.querySelectorAll('.timeline-bucket').forEach((button) => {
+        button.addEventListener('click', () => {
+            mainVideo.currentTime = Number(button.dataset.seconds || 0);
+        });
+    });
+}
+
+function renderEvents(events) {
+    if (!events.length) {
+        eventsTableBody.innerHTML = '<tr><td colspan="6">Aucun événement enregistré.</td></tr>';
+        return;
+    }
+    eventsTableBody.innerHTML = events.map((event) => `
+        <tr>
+            <td><button type="button" class="linkish seek-btn" data-seconds="${event.timestamp_seconds}">${formatSeconds(event.timestamp_seconds)}</button></td>
+            <td><span class="behavior-badge" style="background-color:${event.color};"></span>${event.behavior}</td>
+            <td>${event.event_kind}</td>
+            <td>${event.modifiers.map((modifier) => modifier.name).join(', ') || '—'}</td>
+            <td>${event.comment || '—'}</td>
+            <td>
+                <div class="mini-actions">
+                    <button type="button" class="outline edit-event-btn" data-event-id="${event.id}">Modifier</button>
+                    <button type="button" class="contrast delete-event-btn" data-event-id="${event.id}">Supprimer</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+
+    eventsTableBody.querySelectorAll('.seek-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+            mainVideo.currentTime = Number(button.dataset.seconds || 0);
+        });
+    });
+    eventsTableBody.querySelectorAll('.edit-event-btn').forEach((button) => button.addEventListener('click', handleEditEvent));
+    eventsTableBody.querySelectorAll('.delete-event-btn').forEach((button) => button.addEventListener('click', handleDeleteEvent));
+}
+
+function syncSecondaryVideos(sourceVideo, action = 'time') {
+    if (syncing) return;
+    syncing = true;
+    for (const video of syncVideos) {
+        try {
+            if (action === 'play') {
+                video.playbackRate = sourceVideo.playbackRate;
+                video.play().catch(() => {});
+            } else if (action === 'pause') {
+                video.pause();
+            } else if (action === 'rate') {
+                video.playbackRate = sourceVideo.playbackRate;
+            }
+            if (Math.abs(video.currentTime - sourceVideo.currentTime) > 0.35 || action === 'time') {
+                video.currentTime = sourceVideo.currentTime;
+            }
+        } catch (error) {
+            console.debug(error);
+        }
+    }
+    syncing = false;
+}
+
+async function refreshSessionData() {
+    const duration = mainVideo.duration || mainVideo.currentTime || 0;
+    const response = await fetch(`{% url 'tracker:session_events_json' session.pk %}?duration=${duration}`);
+    const data = await response.json();
+    stateStatus = data.state_status;
+    timelineBuckets = data.timeline_buckets || [];
+    renderEvents(data.events || []);
+    renderStats(data.stats);
+    renderActiveStates();
+    renderTimeline();
+}
+
+async function postJson(url, payload) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Erreur inattendue.');
+    }
+    return data;
+}
+
+async function createEvent(behaviorId, explicitKind = null) {
+    const payload = {
+        behavior_id: behaviorId,
+        timestamp_seconds: Number(mainVideo.currentTime || 0).toFixed(3),
+        event_kind: explicitKind,
+        modifier_ids: [...activeModifierIds],
+    };
+    try {
+        const data = await postJson(`{% url 'tracker:event_create_api' session.pk %}`, payload);
+        stateStatus = data.state_status;
+        renderModifierStates();
+        renderActiveStates();
+        await refreshSessionData();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function handleEditEvent(event) {
+    const eventId = Number(event.currentTarget.dataset.eventId);
+    const response = await fetch(`{% url 'tracker:session_events_json' session.pk %}?duration=${mainVideo.duration || 0}`);
+    const data = await response.json();
+    const row = (data.events || []).find((item) => item.id === eventId);
+    if (!row) {
+        alert('Événement introuvable.');
+        return;
+    }
+    const timestamp = prompt('Nouveau temps (secondes)', row.timestamp_seconds);
+    if (timestamp === null) return;
+    const comment = prompt('Commentaire', row.comment || '');
+    if (comment === null) return;
+    let eventKind = row.event_kind;
+    if (row.behavior_mode === 'state') {
+        const selected = prompt('Type d’événement (start ou stop)', row.event_kind);
+        if (selected === null) return;
+        eventKind = selected.toLowerCase();
+    }
+    try {
+        await postJson(`/events/${eventId}/update/`, {
+            behavior_id: row.behavior_id,
+            timestamp_seconds: timestamp,
+            comment: comment,
+            event_kind: eventKind,
+            modifier_ids: row.modifiers.map((item) => item.id),
+        });
+        await refreshSessionData();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function handleDeleteEvent(event) {
+    const eventId = Number(event.currentTarget.dataset.eventId);
+    if (!confirm('Supprimer cet événement ?')) {
+        return;
+    }
+    try {
+        await postJson(`/events/${eventId}/delete/`, {});
+        await refreshSessionData();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+behaviorButtons.forEach((button) => {
+    button.addEventListener('click', () => createEvent(Number(button.dataset.behaviorId)));
+});
+
+modifierButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const modifierId = Number(button.dataset.modifierId);
+        if (activeModifierIds.has(modifierId)) {
+            activeModifierIds.delete(modifierId);
+        } else {
+            activeModifierIds.add(modifierId);
+        }
+        renderModifierStates();
+    });
+});
+
+refreshEventsBtn.addEventListener('click', refreshSessionData);
+clearModifiersBtn.addEventListener('click', () => {
+    activeModifierIds = new Set();
+    renderModifierStates();
+});
+playPauseBtn.addEventListener('click', () => {
+    if (mainVideo.paused) {
+        mainVideo.play();
+    } else {
+        mainVideo.pause();
+    }
+});
+back2Btn.addEventListener('click', () => { mainVideo.currentTime = Math.max(0, (mainVideo.currentTime || 0) - 2); });
+forward2Btn.addEventListener('click', () => { mainVideo.currentTime = (mainVideo.currentTime || 0) + 2; });
+
+mainVideo.addEventListener('timeupdate', () => {
+    videoTime.textContent = formatSeconds(mainVideo.currentTime || 0);
+    syncSecondaryVideos(mainVideo, 'time');
+});
+mainVideo.addEventListener('play', () => syncSecondaryVideos(mainVideo, 'play'));
+mainVideo.addEventListener('pause', () => syncSecondaryVideos(mainVideo, 'pause'));
+mainVideo.addEventListener('ratechange', () => syncSecondaryVideos(mainVideo, 'rate'));
+mainVideo.addEventListener('loadedmetadata', () => {
+    const rate = Number(mainVideo.dataset.baseRate || '1');
+    mainVideo.playbackRate = rate;
+    syncVideos.forEach((video) => { video.playbackRate = rate; });
+    refreshSessionData();
+});
+
+window.addEventListener('keydown', (event) => {
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+        return;
+    }
+    const key = event.key.toLowerCase();
+    if (key === ' ') {
+        event.preventDefault();
+        if (mainVideo.paused) {
+            mainVideo.play();
+        } else {
+            mainVideo.pause();
+        }
+        return;
+    }
+    if (key === 'backspace') {
+        event.preventDefault();
+        activeModifierIds = new Set();
+        renderModifierStates();
+        return;
+    }
+
+    const modifierButton = modifierButtons.find((button) => button.dataset.key === key);
+    if (modifierButton) {
+        event.preventDefault();
+        modifierButton.click();
+        return;
+    }
+
+    const behaviorButton = behaviorButtons.find((button) => button.dataset.key === key);
+    if (behaviorButton) {
+        event.preventDefault();
+        const explicitKind = behaviorButton.dataset.mode === 'state'
+            ? (event.altKey ? 'start' : (event.shiftKey ? 'stop' : null))
+            : null;
+        createEvent(Number(behaviorButton.dataset.behaviorId), explicitKind);
+    }
+});
+
+renderModifierStates();
+renderActiveStates();
+renderTimeline();
+refreshSessionData();
+</script>
+{% endblock %}

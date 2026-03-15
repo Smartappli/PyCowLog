@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirmation de suppression{% endblock %}
+
+{% block content %}
+<article class="auth-card">
+    <h1>Confirmation</h1>
+    <p>Cette action va supprimer {{ object_label }}.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit" class="contrast">Supprimer</button>
+            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Annuler</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

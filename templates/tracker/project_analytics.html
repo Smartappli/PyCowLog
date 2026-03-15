@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Analytiques — {{ project.name }}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>Analytiques — {{ project.name }}</h1>
+        <p>Vue projet agrégée sur toutes les sessions et export Excel consolidé.</p>
+    </div>
+    <div class="action-stack compact">
+        <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour projet</a>
+        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button">Exporter XLSX</a>
+    </div>
+</header>
+
+<div class="grid two-columns">
+    <article>
+        <h3>Résumé</h3>
+        <div class="stats-row stacked">
+            <span>{{ analytics.session_count }} sessions</span>
+            <span>{{ analytics.video_count }} vidéos</span>
+            <span>{{ analytics.behavior_count }} comportements</span>
+            <span>{{ analytics.event_count }} événements</span>
+            <span>{{ analytics.observed_span_seconds }} secondes observées</span>
+        </div>
+    </article>
+
+    <article>
+        <h3>Conseil</h3>
+        <p>Utilise l’export projet pour partager une synthèse globale avec les collaborateurs, puis les exports de session pour les analyses fines.</p>
+    </article>
+</div>
+
+<article>
+    <h3>Par session</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Session</th>
+                    <th>Observateur</th>
+                    <th>Vidéo principale</th>
+                    <th>Vidéos sync.</th>
+                    <th>Événements</th>
+                    <th>Points</th>
+                    <th>États ouverts</th>
+                    <th>Temps observé (s)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analytics.session_rows %}
+                    <tr>
+                        <td><a href="{% url 'tracker:session_player' row.session_id %}">{{ row.title }}</a></td>
+                        <td>{{ row.observer }}</td>
+                        <td>{{ row.video }}</td>
+                        <td>{{ row.synced_video_count }}</td>
+                        <td>{{ row.event_count }}</td>
+                        <td>{{ row.point_event_count }}</td>
+                        <td>{{ row.open_state_count }}</td>
+                        <td>{{ row.observed_span_seconds }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8">Aucune session.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article>
+    <h3>Par comportement</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Catégorie</th>
+                    <th>Comportement</th>
+                    <th>Mode</th>
+                    <th>Sessions</th>
+                    <th>Points</th>
+                    <th>Starts</th>
+                    <th>Stops</th>
+                    <th>Segments</th>
+                    <th>Durée (s)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analytics.behavior_rows %}
+                    <tr>
+                        <td>{{ row.category }}</td>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.mode }}</td>
+                        <td>{{ row.session_count }}</td>
+                        <td>{{ row.point_count }}</td>
+                        <td>{{ row.start_count }}</td>
+                        <td>{{ row.stop_count }}</td>
+                        <td>{{ row.segment_count }}</td>
+                        <td>{{ row.duration_seconds }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="9">Aucun comportement.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

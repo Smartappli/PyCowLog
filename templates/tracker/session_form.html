@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if mode == 'update' %}Modifier la session{% else %}Nouvelle session{% endif %}{% endblock %}
+
+{% block content %}
+<article class="auth-card wide-card">
+    <header>
+        <h1>{% if mode == 'update' %}Modifier la session{% else %}Créer une session{% endif %}</h1>
+        <p>Projet : <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+    </header>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">{% if mode == 'update' %}Mettre à jour{% else %}Créer la session{% endif %}</button>
+            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Nouveau projet{% endblock %}
+
+{% block content %}
+<article class="auth-card">
+    <header>
+        <h1>Nouveau projet</h1>
+        <p>Crée un projet d’observation, puis ajoute l’éthogramme, les vidéos et les sessions.</p>
+    </header>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">Créer le projet</button>
+            <a href="{% url 'tracker:home' %}" role="button" class="secondary">Retour</a>
+        </div>
+    </form>
+</article>
+{% endblock %}
