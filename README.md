@@ -1,4 +1,4 @@
-# CowLog Django V5 — Django 6.0.3
+# PyCowLog Django V5 — Django 6.0.3
 
 Application Django inspirée de CowLog avec une montée en gamme vers des usages proches de BORIS pour le codage comportemental vidéo.
 
@@ -102,7 +102,7 @@ En revanche, ce projet **n’est pas un clone exhaustif de BORIS** : les observa
 ## Structure
 
 ```text
-cowlog_django_v5_6_0_3/
+PyCowLog/
 ├── config/
 ├── tracker/
 ├── templates/
