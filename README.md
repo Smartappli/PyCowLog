@@ -1,4 +1,4 @@
-# CowLog Django V4 — Django 6.0.3
+# PyCowLog Django V4 — Django 6.0.3
 
 Application Django inspirée de CowLog, prête à exécuter, avec une interface multi-utilisateur pour le codage comportemental à partir de vidéos.
 
