@@ -91,7 +91,7 @@ class ViewTests(TestCase):
 
         export_response = self.client.get(reverse('tracker:session_export_json', args=[session.pk]))
         self.assertEqual(export_response.status_code, 200)
-        self.assertIn('pybehaviorlog-0.8.4-session', export_response.content.decode('utf-8'))
+        self.assertIn('pybehaviorlog-0.8.5-session', export_response.content.decode('utf-8'))
 
     def test_event_update_and_delete_api(self):
         session = self.project.sessions.create(
@@ -210,7 +210,7 @@ class ViewTests(TestCase):
     def test_project_import_boris_json_view(self):
         payload = {
             'schema': 'boris-project-v1',
-            'ethogram': {'schema': 'pybehaviorlog-0.8.4-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
+            'ethogram': {'schema': 'pybehaviorlog-0.8.5-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
             'subject_groups': [{'name': 'Imported group', 'description': '', 'color': '#123456', 'sort_order': 1}],
             'subjects': [{'name': 'Imported subject', 'description': '', 'key_binding': 's', 'color': '#654321', 'sort_order': 1, 'groups': ['Imported group']}],
             'variables': [{'label': 'Weight', 'description': '', 'value_type': 'numeric', 'set_values': [], 'default_value': '0', 'sort_order': 1}],
@@ -246,3 +246,85 @@ class ViewTests(TestCase):
         self.assertEqual(session.review_notes, 'Detailed review note')
 
 
+
+
+    def test_workflow_fix_unpaired_states_action(self):
+        session = ObservationSession.objects.create(
+            project=self.project,
+            observer=self.user,
+            title='Unpaired session',
+            session_kind='live',
+        )
+        self.client.post(
+            reverse('tracker:event_create_api', args=[session.pk]),
+            data=json.dumps({'behavior_id': self.behavior.pk, 'timestamp_seconds': 1.0}),
+            content_type='application/json',
+        )
+        state_behavior = Behavior.objects.create(
+            project=self.project,
+            name='Standing',
+            key_binding='s',
+            mode=Behavior.MODE_STATE,
+        )
+        self.client.post(
+            reverse('tracker:event_create_api', args=[session.pk]),
+            data=json.dumps({'behavior_id': state_behavior.pk, 'timestamp_seconds': 2.0, 'event_kind': 'start'}),
+            content_type='application/json',
+        )
+        response = self.client.post(
+            reverse('tracker:session_workflow_action', args=[session.pk]),
+            data=json.dumps({'action': 'fix_unpaired_states', 'timestamp_seconds': 4.5}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['fixed_count'], 1)
+        stop_event = session.events.filter(behavior=state_behavior, event_kind='stop').first()
+        self.assertIsNotNone(stop_event)
+        self.assertEqual(float(stop_event.timestamp_seconds), 4.5)
+
+    def test_project_import_boris_json_accepts_mapping_shapes(self):
+        payload = {
+            'schema': 'boris-project-v2',
+            'ethogram': {
+                'schema': 'pybehaviorlog-0.8.5-ethogram',
+                'categories': {'General': {'color': '#111111', 'sort_order': 1}},
+                'modifiers': {'Near': {'description': 'proximity', 'key': 'n', 'sort_order': 1}},
+                'behaviors': {'Imported code': {'description': '', 'key': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': {'name': 'General'}}},
+            },
+            'groups': {'Adults': {'description': 'adult group', 'color': '#123456', 'sort_order': 1}},
+            'subjects': {'Cow A': {'key': 'a', 'color': '#654321', 'sort_order': 1, 'groups': ['Adults']}},
+            'independent_variables': {'Weight': {'value_type': 'numeric', 'default_value': '0'}},
+            'templates': {'Standard': {'default_session_kind': 'live', 'codes': ['Imported code'], 'subjects': ['Cow A'], 'variables': ['Weight']}},
+            'observations': {
+                'Obs 1': {
+                    'description': 'Imported mapping session',
+                    'events': [
+                        {'code': 'Imported code', 'time': 1.25, 'subject': 'Cow A', 'modifier': 'Near'},
+                    ],
+                    'annotations': [{'time': 1.5, 'title': 'Mark', 'comment': 'ok'}],
+                }
+            },
+        }
+        upload = SimpleUploadedFile('project.json', json.dumps(payload).encode('utf-8'), content_type='application/json')
+        response = self.client.post(
+            reverse('tracker:project_import_boris_json', args=[self.project.pk]),
+            data={'file': upload, 'import_sessions': 'on', 'create_live_sessions': 'on'},
+        )
+        self.assertEqual(response.status_code, 302)
+        imported_behavior = self.project.behaviors.get(name='Imported code')
+        imported_session = self.project.sessions.get(title='Imported mapping session')
+        imported_event = imported_session.events.get(behavior=imported_behavior)
+        self.assertEqual(imported_event.subjects_display, 'Cow A')
+        self.assertEqual(imported_event.modifiers_display, 'Near')
+        self.assertEqual(imported_session.annotations.first().title, 'Mark')
+
+    def test_session_player_contains_event_editor_controls(self):
+        session = self.project.sessions.create(
+            title='Interface session',
+            observer=self.user,
+            session_kind='live',
+            keyboard_profile=self.profile,
+        )
+        response = self.client.get(reverse('tracker:session_player', args=[session.pk]))
+        self.assertContains(response, 'event-editor')
+        self.assertContains(response, 'fix-unpaired-btn')

@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import zipfile
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
@@ -488,7 +489,11 @@ def build_track_rows(
     for event in session.events.all():
         track = tracks[event.behavior_id]
         if event.event_kind == ObservationEvent.KIND_POINT:
-            track['points'].append(float(event.timestamp_seconds))
+            track['points'].append({
+                'event_id': event.id,
+                'seconds': float(event.timestamp_seconds),
+                'label': event.behavior.name,
+            })
             continue
         if event.event_kind == ObservationEvent.KIND_START:
             open_states[event.behavior_id] = event.timestamp_seconds
@@ -498,6 +503,8 @@ def build_track_rows(
             segment = {
                 'start_seconds': float(start_time),
                 'end_seconds': float(event.timestamp_seconds),
+                'start_event_id': next((item.id for item in session.events.filter(behavior_id=event.behavior_id, event_kind=ObservationEvent.KIND_START, timestamp_seconds=start_time).order_by('pk')), None),
+                'stop_event_id': event.id,
                 'open': False,
             }
             track['segments'].append(segment)
@@ -514,6 +521,8 @@ def build_track_rows(
             segment = {
                 'start_seconds': float(start_time),
                 'end_seconds': float(duration),
+                'start_event_id': next((item.id for item in session.events.filter(behavior_id=behavior.id, event_kind=ObservationEvent.KIND_START, timestamp_seconds=start_time).order_by('pk')), None),
+                'stop_event_id': None,
                 'open': True,
             }
             tracks[behavior.id]['segments'].append(segment)
@@ -962,8 +971,8 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         session_meta.append({'id': session.pk, 'title': session.title, 'filename': filename})
 
     manifest = {
-        'schema': 'pybehaviorlog-0.8.4-bundle',
-        'version': '0.8.4',
+        'schema': 'pybehaviorlog-0.8.5-bundle',
+        'version': '0.8.5',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -978,6 +987,127 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
     files['manifest.json'] = json.dumps(manifest, indent=2, ensure_ascii=False).encode('utf-8')
     return files
 
+
+
+
+
+def _normalize_named_item(item, default_name: str | None = None, label_mode: bool = False) -> dict:
+    """Return a normalized mapping for list/dict BORIS-like import items."""
+    if isinstance(item, str):
+        key = 'label' if label_mode else 'name'
+        return {key: item}
+    if not isinstance(item, dict):
+        key = 'label' if label_mode else 'name'
+        return {key: default_name or str(item)}
+    normalized = dict(item)
+    if label_mode:
+        normalized.setdefault('label', normalized.get('name') or normalized.get('code') or default_name or '')
+        normalized.setdefault('name', normalized['label'])
+    else:
+        normalized.setdefault('name', normalized.get('label') or normalized.get('code') or default_name or '')
+        normalized.setdefault('label', normalized.get('name', ''))
+    return normalized
+
+
+def _coerce_named_items(value, *, label_mode: bool = False) -> list[dict]:
+    """Accept either a list or a mapping keyed by names and normalize it to dict items."""
+    items: list[dict] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            items.append(_normalize_named_item(item, default_name=str(key), label_mode=label_mode))
+        return items
+    if isinstance(value, list):
+        for item in value:
+            items.append(_normalize_named_item(item, label_mode=label_mode))
+    return items
+
+
+def _coerce_name_list(value) -> list[str]:
+    """Convert list/dict/string inputs into a flat list of names for imports."""
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        if all(isinstance(item, dict) for item in value.values()):
+            results = []
+            for key, item in value.items():
+                normalized = _normalize_named_item(item, default_name=str(key))
+                results.append(normalized.get('name') or normalized.get('label') or str(key))
+            return [item for item in results if item]
+        return [str(key) for key, item in value.items() if item]
+    if isinstance(value, list):
+        results = []
+        for item in value:
+            if isinstance(item, dict):
+                normalized = _normalize_named_item(item)
+                results.append(normalized.get('name') or normalized.get('label') or '')
+            else:
+                results.append(str(item))
+        return [item for item in results if item]
+    if isinstance(value, str):
+        return [part.strip() for part in re.split(r'[|,;]', value) if part.strip()]
+    return [str(value)]
+
+
+def _extract_observation_entries(payload: dict) -> list[dict]:
+    """Extract project session/observation payloads from multiple BORIS-like shapes."""
+    candidates = payload.get('sessions')
+    if candidates is None:
+        candidates = payload.get('observations')
+    if candidates is None:
+        candidates = payload.get('observation')
+    if candidates is None:
+        return []
+    if isinstance(candidates, dict):
+        rows = []
+        for key, item in candidates.items():
+            normalized = dict(item) if isinstance(item, dict) else {'title': str(key)}
+            normalized.setdefault('title', normalized.get('description') or str(key))
+            rows.append(normalized)
+        return rows
+    if isinstance(candidates, list):
+        return [item for item in candidates if isinstance(item, dict)]
+    return []
+
+
+def _resolve_behavior_name(item: dict) -> str:
+    return (
+        item.get('behavior')
+        or item.get('code')
+        or item.get('behavior_code')
+        or item.get('event')
+        or ''
+    )
+
+
+def _resolve_event_kind_token(value: str | None) -> str | None:
+    token = (value or '').strip().lower().replace('_', ' ')
+    mapping = {
+        'point': ObservationEvent.KIND_POINT,
+        'instant': ObservationEvent.KIND_POINT,
+        'start': ObservationEvent.KIND_START,
+        'state start': ObservationEvent.KIND_START,
+        'begin': ObservationEvent.KIND_START,
+        'stop': ObservationEvent.KIND_STOP,
+        'state stop': ObservationEvent.KIND_STOP,
+        'end': ObservationEvent.KIND_STOP,
+    }
+    return mapping.get(token)
+
+
+def _extract_media_labels(item: dict) -> list[str]:
+    labels = []
+    for key in ('synced_videos', 'media_files', 'media', 'media_paths'):
+        labels.extend(_coerce_name_list(item.get(key)))
+    primary = item.get('primary_video') or item.get('media_file') or item.get('media_path')
+    if primary:
+        labels.insert(0, str(primary))
+    seen = set()
+    results = []
+    for label in labels:
+        if label and label not in seen:
+            seen.add(label)
+            results.append(label)
+    return results
 
 
 
@@ -1026,8 +1156,9 @@ def import_project_payload(
     schema = payload.get('schema')
     if schema not in {
         'boris-project-v1',
+        'boris-project-v2',
         'pybehaviorlog-0.8.3-bundle',
-        'pybehaviorlog-0.8.4-bundle',
+        'pybehaviorlog-0.8.5-bundle',
     }:
         raise ValueError(_('Unsupported project payload format.'))
 
@@ -1036,7 +1167,7 @@ def import_project_payload(
         project,
         {
             **ethogram_payload,
-            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.4-ethogram'),
+            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.5-ethogram'),
         },
         replace_existing=False,
     )
@@ -1055,10 +1186,10 @@ def import_project_payload(
     imported_event_count = 0
     imported_annotation_count = 0
 
-    for item in payload.get('subject_groups', []):
+    for item in _coerce_named_items(payload.get('subject_groups') or payload.get('groups')):
         group, created = SubjectGroup.objects.update_or_create(
             project=project,
-            name=item['name'],
+            name=item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
                 'color': item.get('color', '#7c3aed'),
@@ -1068,10 +1199,10 @@ def import_project_payload(
         subject_group_map[group.name] = group
         subject_group_count += int(created)
 
-    for item in payload.get('subjects', []):
+    for item in _coerce_named_items(payload.get('subjects')):
         subject, created = Subject.objects.update_or_create(
             project=project,
-            name=item['name'],
+            name=item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
                 'key_binding': (item.get('key_binding') or '')[:1],
@@ -1089,10 +1220,10 @@ def import_project_payload(
         subject_map[subject.name] = subject
         subject_count += int(created)
 
-    for item in payload.get('variables', []):
+    for item in _coerce_named_items(payload.get('variables') or payload.get('independent_variables'), label_mode=True):
         definition, created = IndependentVariableDefinition.objects.update_or_create(
             project=project,
-            label=item['label'],
+            label=item.get('label') or item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
                 'value_type': item.get(
@@ -1110,7 +1241,7 @@ def import_project_payload(
         variable_map[definition.label] = definition
         variable_count += int(created)
 
-    for item in payload.get('observation_templates', []):
+    for item in _coerce_named_items(payload.get('observation_templates') or payload.get('templates')):
         template, created = ObservationTemplate.objects.update_or_create(
             project=project,
             name=item['name'],
@@ -1124,41 +1255,44 @@ def import_project_payload(
         template.behaviors.set(
             [
                 behavior_map[name]
-                for name in item.get('behaviors', [])
+                for name in _coerce_name_list(item.get('behaviors') or item.get('codes'))
                 if name in behavior_map
             ]
         )
         template.modifiers.set(
             [
                 modifier_map[name]
-                for name in item.get('modifiers', [])
+                for name in _coerce_name_list(item.get('modifiers'))
                 if name in modifier_map
             ]
         )
         template.subjects.set(
-            [subject_map[name] for name in item.get('subjects', []) if name in subject_map]
+            [subject_map[name] for name in _coerce_name_list(item.get('subjects')) if name in subject_map]
         )
         template.variable_definitions.set(
             [
                 variable_map[name]
-                for name in item.get('variable_definitions', [])
+                for name in _coerce_name_list(item.get('variable_definitions') or item.get('variables'))
                 if name in variable_map
             ]
         )
         template_count += int(created)
 
     if import_sessions:
-        for index, session_payload in enumerate(payload.get('sessions', []), start=1):
+        session_entries = _extract_observation_entries(payload)
+        if not session_entries and bundled_sessions:
+            session_entries = list(bundled_sessions.values())
+        for index, session_payload in enumerate(session_entries, start=1):
             observation = (session_payload.get('observations') or [{}])[0]
             title = (
                 observation.get('title')
+                or observation.get('description')
                 or session_payload.get('session')
+                or session_payload.get('title')
                 or _('Imported session %(index)s') % {'index': index}
             )
-            primary_label = observation.get('primary_video') or observation.get('media') or ''
-            synced_titles = observation.get('synced_videos') or (
-                [primary_label] if primary_label else []
-            )
+            synced_titles = _extract_media_labels(observation) or _extract_media_labels(session_payload)
+            primary_label = synced_titles[0] if synced_titles else ''
             existing_video = (
                 project.videos.filter(title=primary_label).first() if primary_label else None
             )
@@ -1235,7 +1369,7 @@ def import_project_payload(
 
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.8.4-ethogram',
+        'schema': 'pybehaviorlog-0.8.5-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1316,7 +1450,7 @@ def import_ethogram_payload(
         'cowlog-django-v5-ethogram',
         'pybehaviorlog-0.8-ethogram',
         'pybehaviorlog-0.8.3-ethogram',
-        'pybehaviorlog-0.8.4-ethogram',
+        'pybehaviorlog-0.8.5-ethogram',
     }:
         raise ValueError('Unsupported JSON schema.')
 
@@ -1346,7 +1480,7 @@ def import_ethogram_payload(
     behavior_count = 0
     category_count = 0
 
-    for item in payload.get('categories', []):
+    for item in _coerce_named_items(payload.get('categories')):
         category, created = BehaviorCategory.objects.update_or_create(
             project=project,
             name=item['name'],
@@ -1359,7 +1493,7 @@ def import_ethogram_payload(
         if created:
             category_count += 1
 
-    for item in payload.get('subject_groups', []):
+    for item in _coerce_named_items(payload.get('subject_groups') or payload.get('groups')):
         group, created = SubjectGroup.objects.update_or_create(
             project=project,
             name=item['name'],
@@ -1371,7 +1505,7 @@ def import_ethogram_payload(
         )
         subject_group_map[group.name] = group
 
-    for item in payload.get('subjects', []):
+    for item in _coerce_named_items(payload.get('subjects')):
         subject, _ = Subject.objects.update_or_create(
             project=project,
             name=item['name'],
@@ -1387,41 +1521,44 @@ def import_ethogram_payload(
         ]
         subject.groups.set(groups)
 
-    for item in payload.get('variables', []):
+    for item in _coerce_named_items(payload.get('variables') or payload.get('independent_variables'), label_mode=True):
         IndependentVariableDefinition.objects.update_or_create(
             project=project,
-            label=item['label'],
+            label=item.get('label') or item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
                 'value_type': item.get('value_type', IndependentVariableDefinition.TYPE_TEXT),
-                'set_values': item.get('set_values', ''),
+                'set_values': (', '.join(item.get('set_values', [])) if isinstance(item.get('set_values'), list) else item.get('set_values', '')),
                 'default_value': item.get('default_value', ''),
                 'sort_order': int(item.get('sort_order', 0)),
             },
         )
 
-    for item in payload.get('modifiers', []):
+    for item in _coerce_named_items(payload.get('modifiers')):
         _, created = Modifier.objects.update_or_create(
             project=project,
             name=item['name'],
             defaults={
                 'description': item.get('description', ''),
-                'key_binding': (item.get('key_binding') or '')[0:1].upper(),
+                'key_binding': (item.get('key_binding') or item.get('key') or '')[0:1].upper(),
                 'sort_order': int(item.get('sort_order', 0)),
             },
         )
         if created:
             modifier_count += 1
 
-    for item in payload.get('behaviors', []):
-        category = category_map.get(item.get('category')) if item.get('category') else None
+    for item in _coerce_named_items(payload.get('behaviors')):
+        category_name = item.get('category')
+        if isinstance(category_name, dict):
+            category_name = category_name.get('name')
+        category = category_map.get(category_name) if category_name else None
         _, created = Behavior.objects.update_or_create(
             project=project,
             name=item['name'],
             defaults={
                 'category': category,
                 'description': item.get('description', ''),
-                'key_binding': (item.get('key_binding') or '')[0:1].upper(),
+                'key_binding': (item.get('key_binding') or item.get('key') or '')[0:1].upper(),
                 'color': item.get('color', '#2563eb'),
                 'mode': item.get('mode', Behavior.MODE_POINT),
                 'sort_order': int(item.get('sort_order', 0)),
@@ -1572,16 +1709,16 @@ def import_session_payload(
     subject_map = {item.name: item for item in session.project.subjects.all()}
     variable_map = {item.label: item for item in session.project.variable_definitions.all()}
 
-    event_items = []
-    annotation_items = []
-    variable_items = payload.get('variables', {}) or {}
+    event_items: list[dict] = []
+    annotation_items: list[dict] = []
+    variable_items = payload.get('variables', {}) or payload.get('independent_variables', {}) or {}
 
     if payload.get('schema') in {
         'cowlog-django-v5-session',
         'pybehaviorlog-v6-session',
         'pybehaviorlog-0.8-session',
         'pybehaviorlog-0.8.3-session',
-        'pybehaviorlog-0.8.4-session',
+        'pybehaviorlog-0.8.5-session',
     }:
         event_items = payload.get('events', [])
         annotation_items = payload.get('annotations', [])
@@ -1589,31 +1726,42 @@ def import_session_payload(
         'boris-observation-v1',
         'boris-observation-v2',
         'boris-observation-v3',
-    } or payload.get('observations'):
+    } or payload.get('observations') or payload.get('events'):
         observations = payload.get('observations', [])
+        if isinstance(observations, dict):
+            observations = list(observations.values())
         if observations:
-            event_items = observations[0].get('events', [])
-            annotation_items = observations[0].get('annotations', [])
+            first = observations[0]
+            event_items = first.get('events', [])
+            annotation_items = first.get('annotations', [])
+            if isinstance(first.get('variables'), dict):
+                variable_items = first.get('variables')
+        else:
+            event_items = payload.get('events', [])
+            annotation_items = payload.get('annotations', [])
     else:
         raise ValueError(_('Unsupported session payload format.'))
 
     event_count = 0
     annotation_count = 0
-    for item in event_items:
-        behavior_name = item.get('behavior')
+    for raw_item in event_items:
+        item = dict(raw_item) if isinstance(raw_item, dict) else {}
+        behavior_name = _resolve_behavior_name(item)
         behavior = behavior_map.get(behavior_name)
         if behavior is None:
             continue
+        explicit_kind = _resolve_event_kind_token(item.get('event_kind') or item.get('type'))
         event = ObservationEvent.objects.create(
             session=session,
             behavior=behavior,
-            event_kind=resolve_event_kind(session, behavior, item.get('event_kind')),
+            event_kind=resolve_event_kind(session, behavior, explicit_kind),
             timestamp_seconds=_decimal(
-                item.get('timestamp_seconds', item.get('time')), default='0'
+                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))), default='0'
             ),
-            comment=(item.get('comment') or '').strip(),
+            frame_index=item.get('frame_index') or item.get('frame') or None,
+            comment=(item.get('comment') or item.get('note') or item.get('remarks') or '').strip(),
         )
-        subject_names = item.get('subjects') or []
+        subject_names = _coerce_name_list(item.get('subjects'))
         if item.get('subject') and item.get('subject') not in subject_names:
             subject_names = [item.get('subject'), *subject_names]
         subjects = [subject_map[name] for name in subject_names if name in subject_map]
@@ -1621,13 +1769,14 @@ def import_session_payload(
             event.subject = subjects[0]
             event.save(update_fields=['subject'])
             event.subjects.set(subjects)
-        modifier_names = item.get('modifiers', [])
-        if isinstance(modifier_names, list):
-            modifiers = [modifier_map[name] for name in modifier_names if name in modifier_map]
-            if modifiers:
-                event.modifiers.set(modifiers)
+        modifier_names = _coerce_name_list(item.get('modifiers') or item.get('modifier'))
+        modifiers = [modifier_map[name] for name in modifier_names if name in modifier_map]
+        if modifiers:
+            event.modifiers.set(modifiers)
         event_count += 1
 
+    if not isinstance(variable_items, dict):
+        variable_items = {item.get('label') or item.get('name'): item.get('value') for item in _coerce_named_items(variable_items, label_mode=True)}
     for label, value in variable_items.items():
         definition = variable_map.get(label)
         if definition is None:
@@ -1648,19 +1797,21 @@ def import_session_payload(
         session.review_notes = payload.get('review_notes', session.review_notes or '')
         session.save(update_fields=['workflow_status', 'review_notes'])
 
-    for item in annotation_items:
+    for raw_item in annotation_items:
+        item = dict(raw_item) if isinstance(raw_item, dict) else {}
         SessionAnnotation.objects.create(
             session=session,
             timestamp_seconds=_decimal(
-                item.get('timestamp_seconds', item.get('time')), default='0'
+                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))), default='0'
             ),
             title=(item.get('title') or 'Note').strip()[:120] or 'Note',
-            note=(item.get('note') or '').strip(),
+            note=(item.get('note') or item.get('comment') or '').strip(),
             color=item.get('color', '#f59e0b'),
             created_by=session.observer,
         )
         annotation_count += 1
     return event_count, annotation_count
+
 
 
 @login_required
@@ -2677,6 +2828,48 @@ def session_import_json(request, pk: int):  # pragma: no cover
     )
 
 
+def close_open_state_events(session: ObservationSession, actor, timestamp_seconds=None) -> int:
+    """Insert STOP events at the end of the session for still-open state events."""
+    if timestamp_seconds is None:
+        timestamp_seconds = _session_duration(session)
+    stop_at = _decimal(timestamp_seconds, default='0')
+    open_states: dict[int, bool] = {
+        behavior.id: False for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE)
+    }
+    for event in session.events.select_related('behavior').order_by('timestamp_seconds', 'pk'):
+        if event.behavior.mode != Behavior.MODE_STATE:
+            continue
+        if event.event_kind == ObservationEvent.KIND_START:
+            open_states[event.behavior_id] = True
+        elif event.event_kind == ObservationEvent.KIND_STOP:
+            open_states[event.behavior_id] = False
+
+    created = 0
+    for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE).order_by('sort_order', 'name'):
+        if not open_states.get(behavior.id):
+            continue
+        event = ObservationEvent.objects.create(
+            session=session,
+            behavior=behavior,
+            event_kind=ObservationEvent.KIND_STOP,
+            timestamp_seconds=stop_at,
+            comment=_('Automatically inserted STOP for an open state.'),
+        )
+        _log_audit(
+            session,
+            actor=actor,
+            action=ObservationAuditLog.ACTION_UPDATE,
+            target_type=ObservationAuditLog.TARGET_EVENT,
+            target_id=event.id,
+            summary=f'Inserted STOP for open state {behavior.name}.',
+            payload=serialize_event(event),
+        )
+        created += 1
+    return created
+
+
+
+
 @login_required
 @require_POST
 def session_workflow_action(request, pk: int):
@@ -2694,15 +2887,27 @@ def session_workflow_action(request, pk: int):
         'unlock': ObservationSession.STATUS_DRAFT,
         'reopen': ObservationSession.STATUS_DRAFT,
         'save_notes': None,
+        'fix_unpaired_states': None,
     }
     if action not in status_map:
         return JsonResponse({'error': _('Invalid workflow action.')}, status=400)
     if action == 'submit':
         if not session.project.can_edit(request.user):
             return JsonResponse({'error': _('You need editor permissions to submit a session for review.')}, status=403)
+    elif action == 'fix_unpaired_states':
+        if not session.project.can_edit(request.user):
+            return JsonResponse({'error': _('You need editor permissions to fix unpaired states.')}, status=403)
     else:
         if not session.project.can_review(request.user):
             return JsonResponse({'error': _('You need reviewer permissions to change workflow status.')}, status=403)
+    if action == 'fix_unpaired_states':
+        fixed_count = close_open_state_events(session, actor=request.user, timestamp_seconds=payload.get('timestamp_seconds'))
+        return JsonResponse({
+            'ok': True,
+            'fixed_count': fixed_count,
+            'workflow_status': session.workflow_status,
+            'review_notes': session.review_notes,
+        })
     if action == 'save_notes':
         session.review_notes = review_notes
         session.save(update_fields=['review_notes'])
@@ -3154,7 +3359,7 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.8.4-session',
+        'schema': 'pybehaviorlog-0.8.5-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,

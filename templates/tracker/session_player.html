@@ -186,7 +186,10 @@
         <article>
             <div class="section-headline">
                 <h3>{% trans 'Integrity and intervals' %}</h3>
-                <button type="button" id="refresh-events-btn" class="secondary">{% trans 'Refresh' %}</button>
+                <div class="mini-actions wrap-controls">
+                    <button type="button" id="fix-unpaired-btn" class="secondary">{% trans 'Fix unpaired states' %}</button>
+                    <button type="button" id="refresh-events-btn" class="secondary">{% trans 'Refresh' %}</button>
+                </div>
             </div>
             <div id="integrity-output" class="integrity-box"></div>
             <div class="table-wrapper compact-table-wrapper">
@@ -254,6 +257,48 @@
 
         <article>
             <div class="section-headline"><h3>{% trans 'Events' %}</h3></div>
+            <div id="event-editor" class="integrity-box event-editor">
+                <div class="selection-summary">
+                    <strong>{% trans 'Selected event editor' %}</strong>
+                    <span id="selected-event-label" class="muted">{% trans 'No event selected.' %}</span>
+                </div>
+                <div class="timeline-toolbar">
+                    <div>
+                        <label for="event-editor-time">{% trans 'Time (seconds)' %}</label>
+                        <input id="event-editor-time" type="number" step="0.001" min="0">
+                    </div>
+                    <div>
+                        <label for="event-editor-behavior">{% trans 'Behavior' %}</label>
+                        <select id="event-editor-behavior">
+                            {% for behavior in behaviors %}
+                                <option value="{{ behavior.id }}">{{ behavior.name }} · {{ behavior.get_mode_display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="event-editor-kind">{% trans 'Type' %}</label>
+                        <select id="event-editor-kind">
+                            <option value="point">{% trans 'Point' %}</option>
+                            <option value="start">{% trans 'Start' %}</option>
+                            <option value="stop">{% trans 'Stop' %}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="event-editor-comment">{% trans 'Comment' %}</label>
+                        <input id="event-editor-comment" type="text">
+                    </div>
+                </div>
+                <div class="mini-actions wrap-controls">
+                    <button type="button" id="event-editor-minus-second" class="secondary">-1 s</button>
+                    <button type="button" id="event-editor-minus-frame" class="secondary">{% trans '-1 frame' %}</button>
+                    <button type="button" id="event-editor-plus-frame" class="secondary">{% trans '+1 frame' %}</button>
+                    <button type="button" id="event-editor-plus-second" class="secondary">+1 s</button>
+                    <button type="button" id="event-editor-apply" class="secondary">{% trans 'Save event' %}</button>
+                    <button type="button" id="event-editor-duplicate" class="secondary">{% trans 'Duplicate event' %}</button>
+                    <button type="button" id="event-editor-clear" class="secondary">{% trans 'Clear selection' %}</button>
+                </div>
+                <p class="muted">{% trans 'The editor uses the current subject and modifier selections when you save or duplicate the selected event.' %}</p>
+            </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="events-table">
                     <thead><tr><th>Time</th><th>{% trans 'Behavior' %}</th><th>{% trans 'Type' %}</th><th>{% trans 'Subjects' %}</th><th>{% trans 'Modifiers' %}</th><th>{% trans 'Comment' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
@@ -320,6 +365,20 @@ const timelineBehaviorFilter = document.getElementById('timeline-behavior-filter
 const timelineTrackSearch = document.getElementById('timeline-track-search');
 const timelineSelectionOutput = document.getElementById('timeline-selection-output');
 const timelineClearSelectionBtn = document.getElementById('timeline-clear-selection-btn');
+const fixUnpairedBtn = document.getElementById('fix-unpaired-btn');
+const eventEditor = document.getElementById('event-editor');
+const selectedEventLabel = document.getElementById('selected-event-label');
+const eventEditorTime = document.getElementById('event-editor-time');
+const eventEditorBehavior = document.getElementById('event-editor-behavior');
+const eventEditorKind = document.getElementById('event-editor-kind');
+const eventEditorComment = document.getElementById('event-editor-comment');
+const eventEditorApplyBtn = document.getElementById('event-editor-apply');
+const eventEditorDuplicateBtn = document.getElementById('event-editor-duplicate');
+const eventEditorClearBtn = document.getElementById('event-editor-clear');
+const eventEditorMinusSecondBtn = document.getElementById('event-editor-minus-second');
+const eventEditorMinusFrameBtn = document.getElementById('event-editor-minus-frame');
+const eventEditorPlusFrameBtn = document.getElementById('event-editor-plus-frame');
+const eventEditorPlusSecondBtn = document.getElementById('event-editor-plus-second');
 
 function getCookie(name) {
     return document.cookie.split('; ').find((row) => row.startsWith(`${name}=`))?.split('=')[1] || '';
@@ -358,6 +417,11 @@ const jsI18n = {
     jumpToEnd: "{% trans 'Jump to end' %}",
     currentBucket: "{% trans 'Current bucket' %}",
     allActions: "{% trans 'All actions' %}",
+    noEventSelected: "{% trans 'No event selected.' %}",
+    selectedEvent: "{% trans 'Selected event' %}",
+    saveEvent: "{% trans 'Save event' %}",
+    duplicateEvent: "{% trans 'Duplicate event' %}",
+    fixUnpairedDone: "{% trans 'Inserted STOP events' %}",
 };
 
 let stateStatus = JSON.parse(document.getElementById('state-status-data').textContent);
@@ -376,6 +440,7 @@ let liveClockSeconds = 0;
 let liveTimerRunning = false;
 let liveTimerHandle = null;
 let liveTimerStartedAt = null;
+let selectedEventSnapshot = null;
 
 function formatSeconds(value) {
     const numeric = Number(value || 0);
@@ -507,6 +572,72 @@ function filteredTrackRows() {
     });
 }
 
+function syncSelectionsFromEvent(eventData) {
+    activeModifierIds = new Set((eventData.modifiers || []).map((item) => Number(item.id)));
+    activeSubjectIds = new Set((eventData.subjects || []).map((item) => Number(item.id)));
+    renderModifierStates();
+    renderSubjectStates();
+}
+
+function clearEventEditor() {
+    selectedEventSnapshot = null;
+    if (selectedEventLabel) selectedEventLabel.textContent = jsI18n.noEventSelected;
+    if (eventEditorTime) eventEditorTime.value = '';
+    if (eventEditorComment) eventEditorComment.value = '';
+    if (eventEditorBehavior) eventEditorBehavior.selectedIndex = 0;
+    if (eventEditorKind) eventEditorKind.value = 'point';
+}
+
+function populateEventEditor(eventData, {syncSelections = true} = {}) {
+    selectedEventSnapshot = eventData;
+    if (selectedEventLabel) {
+        selectedEventLabel.textContent = `${eventData.behavior} · ${formatSeconds(eventData.timestamp_seconds)} · ${eventData.event_kind}`;
+    }
+    if (eventEditorTime) eventEditorTime.value = Number(eventData.timestamp_seconds).toFixed(3);
+    if (eventEditorBehavior) eventEditorBehavior.value = String(eventData.behavior_id);
+    if (eventEditorKind) eventEditorKind.value = eventData.event_kind;
+    if (eventEditorComment) eventEditorComment.value = eventData.comment || '';
+    if (syncSelections) syncSelectionsFromEvent(eventData);
+}
+
+function eventEditorPayload() {
+    if (!selectedEventSnapshot) return null;
+    const behaviorId = Number(eventEditorBehavior?.value || selectedEventSnapshot.behavior_id);
+    const behaviorButton = behaviorButtons.find((item) => Number(item.dataset.behaviorId) === behaviorId);
+    const behaviorMode = behaviorButton?.dataset.mode || selectedEventSnapshot.behavior_mode;
+    let eventKind = eventEditorKind?.value || selectedEventSnapshot.event_kind;
+    if (behaviorMode === 'point') eventKind = 'point';
+    return {
+        behavior_id: behaviorId,
+        timestamp_seconds: Math.max(0, Number(eventEditorTime?.value || selectedEventSnapshot.timestamp_seconds || 0)).toFixed(3),
+        event_kind: eventKind,
+        comment: eventEditorComment?.value || '',
+        modifier_ids: [...activeModifierIds],
+        subject_ids: [...activeSubjectIds],
+    };
+}
+
+async function persistSelectedEvent() {
+    const payload = eventEditorPayload();
+    if (!payload || !selectedEventSnapshot) return;
+    await sendJSON(`/events/${selectedEventSnapshot.id}/update/`, payload);
+    await fetchSessionState();
+}
+
+async function duplicateSelectedEvent(offsetSeconds = 0) {
+    const payload = eventEditorPayload();
+    if (!payload) return;
+    payload.timestamp_seconds = Math.max(0, Number(payload.timestamp_seconds) + offsetSeconds).toFixed(3);
+    await sendJSON(`{% url 'tracker:event_create_api' session.pk %}`, payload);
+    await fetchSessionState();
+}
+
+function nudgeSelectedEvent(deltaSeconds) {
+    if (!selectedEventSnapshot || !eventEditorTime) return;
+    const nextValue = Math.max(0, Number(eventEditorTime.value || selectedEventSnapshot.timestamp_seconds || 0) + deltaSeconds);
+    eventEditorTime.value = nextValue.toFixed(3);
+}
+
 function updateTimelineSelection(bucket, extendSelection = false) {
     if (!bucket) {
         timelineSelection = [];
@@ -595,11 +726,12 @@ function renderTracks() {
         const segments = row.segments.map((segment) => {
             const left = (segment.start_seconds / duration) * 100;
             const width = Math.max(((segment.end_seconds - segment.start_seconds) / duration) * 100, 0.6);
-            return `<div class="track-segment ${segment.open ? 'open-segment' : ''}" style="left:${left}%; width:${width}%; background:${row.color};"></div>`;
+            const segmentEventId = segment.stop_event_id || segment.start_event_id || '';
+            return `<button type="button" class="track-segment jump-button ${segment.open ? 'open-segment' : ''}" data-seconds="${segment.start_seconds}" data-event-id="${segmentEventId}" style="left:${left}%; width:${width}%; background:${row.color};" title="${row.name} ${segment.start_seconds.toFixed(3)}-${segment.end_seconds.toFixed(3)} s"></button>`;
         }).join('');
         const points = row.points.map((point) => {
-            const left = (point / duration) * 100;
-            return `<button type="button" class="track-point jump-button" data-seconds="${point}" style="left:${left}%; background:${row.color};" title="${row.name} @ ${point.toFixed(3)} s"></button>`;
+            const left = (point.seconds / duration) * 100;
+            return `<button type="button" class="track-point jump-button" data-seconds="${point.seconds}" data-event-id="${point.event_id}" style="left:${left}%; background:${row.color};" title="${row.name} @ ${point.seconds.toFixed(3)} s"></button>`;
         }).join('');
         const currentMarkerLeft = (currentTimeValue() / duration) * 100;
         return `
@@ -661,8 +793,8 @@ function renderIntervals() {
 
 function renderEvents(events) {
     eventsTableBody.innerHTML = events.map((event) => `
-        <tr>
-            <td><button type="button" class="linkish jump-button" data-seconds="${event.timestamp_seconds}">${formatSeconds(event.timestamp_seconds)}</button></td>
+        <tr class="${selectedEventSnapshot?.id === event.id ? 'is-selected-row' : ''}">
+            <td><button type="button" class="linkish jump-button" data-seconds="${event.timestamp_seconds}" data-event-id="${event.id}">${formatSeconds(event.timestamp_seconds)}</button></td>
             <td><span class="behavior-badge" style="background-color:${event.color};"></span>${event.behavior}</td>
             <td>${event.event_kind}</td>
             <td>${event.subjects_display || ''}</td>
@@ -670,6 +802,7 @@ function renderEvents(events) {
             <td>${event.comment || ''}</td>
             <td class="mini-actions">
                 ${canCodeSession ? `<button type="button" class="linkish edit-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>${jsI18n.edit}</button>` : ''}
+                ${canCodeSession ? `<button type="button" class="linkish duplicate-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>${jsI18n.duplicateEvent}</button>` : ''}
                 ${canCodeSession ? `<button type="button" class="linkish delete-event-btn" data-event-id="${event.id}">${jsI18n.delete}</button>` : ''}
             </td>
         </tr>`).join('');
@@ -707,7 +840,13 @@ async function fetchSessionState() {
     renderIntegrity();
     renderIntervals();
     renderActiveStates();
+    const matchedSelectedEvent = selectedEventSnapshot ? data.events.find((item) => item.id === selectedEventSnapshot.id) : null;
     renderEvents(data.events);
+    if (matchedSelectedEvent) {
+        populateEventEditor(matchedSelectedEvent, {syncSelections: false});
+    } else if (selectedEventSnapshot) {
+        clearEventEditor();
+    }
     renderAnnotations(data.annotations);
     renderAudit();
 }
@@ -828,10 +967,34 @@ workflowValidateBtn?.addEventListener('click', async () => { try { await sendJSO
 workflowLockBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'lock', review_notes: reviewNotesInput?.value || ''}); await fetchSessionState(); } catch (error) { alert(error.message); } });
 workflowUnlockBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'unlock', review_notes: reviewNotesInput?.value || ''}); await fetchSessionState(); } catch (error) { alert(error.message); } });
 workflowReopenBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'reopen', review_notes: reviewNotesInput?.value || ''}); await fetchSessionState(); } catch (error) { alert(error.message); } });
+fixUnpairedBtn?.addEventListener('click', async () => {
+    try {
+        const result = await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'fix_unpaired_states', timestamp_seconds: currentTimeValue().toFixed(3)});
+        await fetchSessionState();
+        alert(`${jsI18n.fixUnpairedDone}: ${result.fixed_count}`);
+    } catch (error) { alert(error.message); }
+});
+eventEditorApplyBtn?.addEventListener('click', async () => { try { await persistSelectedEvent(); } catch (error) { alert(error.message); } });
+eventEditorDuplicateBtn?.addEventListener('click', async () => { try { await duplicateSelectedEvent(frameStep); } catch (error) { alert(error.message); } });
+eventEditorClearBtn?.addEventListener('click', clearEventEditor);
+eventEditorMinusSecondBtn?.addEventListener('click', () => nudgeSelectedEvent(-1));
+eventEditorMinusFrameBtn?.addEventListener('click', () => nudgeSelectedEvent(-frameStep));
+eventEditorPlusFrameBtn?.addEventListener('click', () => nudgeSelectedEvent(frameStep));
+eventEditorPlusSecondBtn?.addEventListener('click', () => nudgeSelectedEvent(1));
 
 document.addEventListener('click', async (event) => {
     const jumpButton = event.target.closest('.jump-button');
-    if (jumpButton) seekAll(Number(jumpButton.dataset.seconds));
+    if (jumpButton) {
+        seekAll(Number(jumpButton.dataset.seconds));
+        const eventId = Number(jumpButton.dataset.eventId || 0);
+        if (eventId) {
+            const rowButton = document.querySelector(`.edit-event-btn[data-event*='"id":${eventId}']`);
+            if (rowButton) {
+                const raw = rowButton.dataset.event.replace(/&apos;/g, "'");
+                populateEventEditor(JSON.parse(raw));
+            }
+        }
+    }
     const deleteEventBtn = event.target.closest('.delete-event-btn');
     if (deleteEventBtn && confirm(jsI18n.deleteEventConfirm)) {
         try { await sendJSON(`/events/${deleteEventBtn.dataset.eventId}/delete/`, {}); await fetchSessionState(); } catch (error) { alert(error.message); }
@@ -839,21 +1002,14 @@ document.addEventListener('click', async (event) => {
     const editEventBtn = event.target.closest('.edit-event-btn');
     if (editEventBtn) {
         const raw = editEventBtn.dataset.event.replace(/&apos;/g, "'");
-        const eventData = JSON.parse(raw);
-        const newComment = prompt(jsI18n.comment, eventData.comment || '');
-        if (newComment === null) return;
-        const newTime = prompt(jsI18n.timeSeconds, eventData.timestamp_seconds);
-        if (newTime === null) return;
+        populateEventEditor(JSON.parse(raw));
+    }
+    const duplicateEventBtn = event.target.closest('.duplicate-event-btn');
+    if (duplicateEventBtn) {
+        const raw = duplicateEventBtn.dataset.event.replace(/&apos;/g, "'");
+        populateEventEditor(JSON.parse(raw));
         try {
-            await sendJSON(`/events/${eventData.id}/update/`, {
-                behavior_id: eventData.behavior_id,
-                timestamp_seconds: newTime,
-                event_kind: eventData.event_kind,
-                comment: newComment,
-                modifier_ids: eventData.modifiers.map((item) => item.id),
-                subject_ids: eventData.subjects.map((item) => item.id),
-            });
-            await fetchSessionState();
+            await duplicateSelectedEvent(frameStep);
         } catch (error) { alert(error.message); }
     }
     const deleteAnnotationBtn = event.target.closest('.delete-annotation-btn');
