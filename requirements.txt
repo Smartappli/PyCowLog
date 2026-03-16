@@ -3,4 +3,4 @@ argon2-cffi>=23.1,<26
 granian>=2.2,<3
 openpyxl==3.1.5
 psycopg[binary,pool]>=3.2,<4
-redis[hiredis]>=5.2,<7
+redis[hiredis]>=5.2,<8
