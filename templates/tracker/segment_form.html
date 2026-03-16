@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% if mode == 'create' %}{% trans 'New review segment' %}{% else %}{% trans 'Edit review segment' %}{% endif %}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>{% if mode == 'create' %}{% trans 'New review segment' %}{% else %}{% trans 'Edit review segment' %}{% endif %}</h1>
+        <p>{{ session.title }} · {{ project.name }}</p>
+    </div>
+</header>
+
+<form method="post" class="panel stacked-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="action-stack">
+        <button type="submit">{% trans 'Save' %}</button>
+        <a href="{{ session.get_absolute_url }}" role="button" class="secondary">{% trans 'Cancel' %}</a>
+    </div>
+</form>
+{% endblock %}

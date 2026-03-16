@@ -1,6 +1,6 @@
-# Compatibility profile for PyBehaviorLog 0.9
+# Compatibility profile for PyBehaviorLog 0.9.1
 
-PyBehaviorLog 0.9 strengthens interoperability with BORIS and CowLog around the formats and workflows that are publicly documented.
+PyBehaviorLog 0.9.1 strengthens interoperability with BORIS and CowLog around the formats and workflows that are publicly documented.
 
 ## BORIS coverage
 
@@ -61,7 +61,7 @@ Those fixtures are executed in the Django test suite and compared through normal
 
 ## Compatibility reports
 
-PyBehaviorLog 0.9 adds machine-readable compatibility reports at both project and session level.
+PyBehaviorLog 0.9.1 adds machine-readable compatibility reports at both project and session level.
 
 They summarize:
 

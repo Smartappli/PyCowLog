@@ -9,7 +9,7 @@
 <header class="page-header">
     <div>
         <h1>{% trans 'My PyBehaviorLog projects' %}</h1>
-        <p>{% trans 'Version 0.9 adds project lifecycle operations: import as a new project, project cloning, release metadata, and deployment-oriented health checks.' %}</p>
+        <p>{% trans 'Version 0.9.1 adds segment-level review queues on top of the 0.9 project lifecycle operations.' %}</p>
     </div>
     <div class="action-stack compact">
         <a href="{% url 'tracker:project_create' %}" role="button">{% trans 'New project' %}</a>
@@ -17,6 +17,24 @@
     </div>
 </header>
 
+
+<section class="card-grid">
+    <article class="project-card">
+        <div class="project-card-top">
+            <h3>{% trans 'Review queue' %}</h3>
+            <span class="pill">{{ review_queue.counts.outstanding }}</span>
+        </div>
+        <p>{% trans 'Track assigned coding windows, reviewer handoffs, and outstanding review segments across all projects you can access.' %}</p>
+        <div class="stats-row">
+            <span>{{ review_queue.counts.assigned }} {% trans 'assigned' %}</span>
+            <span>{{ review_queue.counts.review }} {% trans 'for review' %}</span>
+            <span>{{ review_queue.counts.outstanding }} {% trans 'open segments' %}</span>
+        </div>
+        <div class="action-stack compact">
+            <a href="{% url 'tracker:review_queue' %}" role="button" class="secondary">{% trans 'Open queue' %}</a>
+        </div>
+    </article>
+</section>
 <section class="card-grid">
     {% for project in projects %}
         <article class="project-card">

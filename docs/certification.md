@@ -1,6 +1,6 @@
-# Compatibility certification notes for PyBehaviorLog 0.9
+# Compatibility certification notes for PyBehaviorLog 0.9.1
 
-PyBehaviorLog 0.9 introduces a small built-in compatibility corpus and round-trip comparison helpers.
+PyBehaviorLog 0.9.1 introduces a small built-in compatibility corpus and round-trip comparison helpers.
 
 ## Included fixture families
 

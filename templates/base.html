@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}PyBehaviorLog 0.9{% endblock %}</title>
+    <title>{% block title %}PyBehaviorLog 0.9.1{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'tracker/app.css' %}">
 </head>
 <body>
@@ -14,7 +14,7 @@
                 <a class="brand-mark" href="{% url 'tracker:home' %}">PB</a>
                 <div>
                     <p class="eyebrow">{% trans 'Behavioral coding studio' %}</p>
-                    <h1 class="brand-title"><a href="{% url 'tracker:home' %}">PyBehaviorLog 0.9</a></h1>
+                    <h1 class="brand-title"><a href="{% url 'tracker:home' %}">PyBehaviorLog 0.9.1</a></h1>
                 </div>
             </div>
             <div class="utility-row">
@@ -45,6 +45,7 @@
                 <a href="{% url 'tracker:home' %}">{% trans 'Dashboard' %}</a>
                 {% if user.is_authenticated %}
                     <a href="{% url 'tracker:project_create' %}">{% trans 'New project' %}</a>
+                    <a href="{% url 'tracker:review_queue' %}">{% trans 'Review queue' %}</a>
                     <a href="/admin/">{% trans 'Administration' %}</a>
                 {% endif %}
             </div>

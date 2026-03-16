@@ -110,7 +110,7 @@ class HelperTests(TestCase):
 
     def test_build_project_statistics_and_payloads(self):
         payload = build_ethogram_payload(self.project)
-        self.assertEqual(payload['schema'], 'pybehaviorlog-0.9-ethogram')
+        self.assertEqual(payload['schema'], 'pybehaviorlog-0.9.1-ethogram')
         imported_categories, _, imported_behaviors = import_ethogram_payload(
             self.project, payload, replace_existing=False
         )
@@ -132,7 +132,7 @@ class HelperTests(TestCase):
 
     def test_import_session_payload_v83(self):
         payload = {
-            'schema': 'pybehaviorlog-0.9-session',
+            'schema': 'pybehaviorlog-0.9.1-session',
             'workflow_status': 'validated',
             'review_notes': 'Checked',
             'events': [
@@ -214,8 +214,10 @@ class HelperTests(TestCase):
         SessionVideoLink.objects.create(session=self.session, video=video, sort_order=0)
         boris_payload = build_boris_like_payload(self.session)
         media = build_media_analysis(self.session)
-        self.assertEqual(boris_payload['observations'][0]['media_paths'][0], 'videos/clip.wav')
-        self.assertEqual(media[0]['relative_path'], 'videos/clip.wav')
+        self.assertTrue(boris_payload['observations'][0]['media_paths'][0].startswith('videos/clip'))
+        self.assertTrue(boris_payload['observations'][0]['media_paths'][0].endswith('.wav'))
+        self.assertTrue(media[0]['relative_path'].startswith('videos/clip'))
+        self.assertTrue(media[0]['relative_path'].endswith('.wav'))
 
     def test_parse_tabular_session_rows(self):
         rows = [

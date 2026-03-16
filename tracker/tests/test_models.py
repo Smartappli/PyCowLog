@@ -11,6 +11,7 @@ from tracker.models import (
     Modifier,
     ObservationAuditLog,
     ObservationEvent,
+    ObservationSegment,
     ObservationSession,
     Project,
     ProjectMembership,
@@ -146,3 +147,22 @@ class ModelTests(TestCase):
             summary='Workflow changed to validated.',
         )
         self.assertIn('status', str(log))
+
+
+    def test_observation_segment_duration(self):
+        session = ObservationSession.objects.create(
+            project=self.project,
+            observer=self.user,
+            title='Seg session',
+            session_kind=ObservationSession.KIND_LIVE,
+        )
+        segment = ObservationSegment.objects.create(
+            session=session,
+            title='Window A',
+            start_seconds=Decimal('1.000'),
+            end_seconds=Decimal('3.500'),
+            status=ObservationSegment.STATUS_IN_PROGRESS,
+            assignee=self.member,
+        )
+        self.assertEqual(segment.duration_seconds, 2.5)
+        self.assertIn('Window A', str(segment))

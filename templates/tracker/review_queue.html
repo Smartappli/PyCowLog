@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans 'Review queue' %}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1>{% trans 'Review queue' %}</h1>
+        <p>{% trans 'Segment-level assignments for coding, checking, and reviewer handoff across projects.' %}</p>
+    </div>
+</header>
+
+<section class="card-grid">
+    <article>
+        <h3>{% trans 'Assigned to me' %}</h3>
+        <p class="stats-row"><span>{{ queue.counts.assigned }}</span></p>
+        <p><a href="?filter=assigned">{% trans 'Show assigned segments' %}</a></p>
+    </article>
+    <article>
+        <h3>{% trans 'Waiting for my review' %}</h3>
+        <p class="stats-row"><span>{{ queue.counts.review }}</span></p>
+        <p><a href="?filter=review">{% trans 'Show review segments' %}</a></p>
+    </article>
+    <article>
+        <h3>{% trans 'Outstanding overall' %}</h3>
+        <p class="stats-row"><span>{{ queue.counts.outstanding }}</span></p>
+        <p><a href="?filter=outstanding">{% trans 'Show all open segments' %}</a></p>
+    </article>
+</section>
+
+<article>
+    <div class="section-headline">
+        <h3>{% trans 'Segments' %}</h3>
+        <span class="pill">{{ active_filter }}</span>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>{% trans 'Project' %}</th><th>{% trans 'Session' %}</th><th>{% trans 'Segment' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th></tr></thead>
+            <tbody>
+            {% for segment in rows %}
+                <tr>
+                    <td>{{ segment.session.project.name }}</td>
+                    <td><a href="{% url 'tracker:session_player' segment.session.pk %}">{{ segment.session.title }}</a></td>
+                    <td>{{ segment.title }}</td>
+                    <td>{{ segment.start_seconds }}s → {{ segment.end_seconds }}s</td>
+                    <td>{{ segment.get_status_display }}</td>
+                    <td>{{ segment.assignee.username|default:'—' }}</td>
+                    <td>{{ segment.reviewer.username|default:'—' }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7">{% trans 'No segments match this filter.' %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

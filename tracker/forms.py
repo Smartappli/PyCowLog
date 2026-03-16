@@ -9,6 +9,7 @@ from .models import (
     IndependentVariableDefinition,
     KeyboardProfile,
     Modifier,
+    ObservationSegment,
     ObservationSession,
     ObservationTemplate,
     ObservationVariableValue,
@@ -130,7 +131,7 @@ class EthogramImportForm(forms.Form):
     file = forms.FileField(
         label=_('File'),
         help_text=_(
-            'JSON export from PyBehaviorLog 0.9 or BORIS-compatible JSON.'
+            'JSON export from PyBehaviorLog 0.9.1 or BORIS-compatible JSON.'
         ),
     )
     replace_existing = forms.BooleanField(
@@ -163,7 +164,7 @@ class ProjectBORISImportForm(forms.Form):
 
 
 class SessionImportForm(forms.Form):
-    file = forms.FileField(label=_('File'), help_text=_('PyBehaviorLog 0.9 JSON, BORIS observation JSON, spreadsheet-like session tables, or CowLog plain-text coding results.'))
+    file = forms.FileField(label=_('File'), help_text=_('PyBehaviorLog 0.9.1 JSON, BORIS observation JSON, spreadsheet-like session tables, or CowLog plain-text coding results.'))
     clear_existing = forms.BooleanField(
         required=False,
         label=_('Delete existing events and annotations before import'),
@@ -305,6 +306,40 @@ class VideoAssetForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             self.fields['file'].required = False
+
+
+
+class ObservationSegmentForm(forms.ModelForm):
+    class Meta:
+        model = ObservationSegment
+        fields = ['title', 'start_seconds', 'end_seconds', 'status', 'assignee', 'reviewer', 'notes']
+        widgets = {'notes': forms.Textarea(attrs={'rows': 3})}
+        labels = {
+            'title': _('Title'),
+            'start_seconds': _('Start (seconds)'),
+            'end_seconds': _('End (seconds)'),
+            'status': _('Status'),
+            'assignee': _('Assignee'),
+            'reviewer': _('Reviewer'),
+            'notes': _('Notes'),
+        }
+
+    def __init__(self, *args, project=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        queryset = User.objects.order_by('username')
+        if project is not None:
+            member_ids = list(project.memberships.values_list('user_id', flat=True)) + [project.owner_id]
+            queryset = queryset.filter(pk__in=member_ids).distinct()
+        self.fields['assignee'].queryset = queryset
+        self.fields['reviewer'].queryset = queryset
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get('start_seconds')
+        end = cleaned.get('end_seconds')
+        if start is not None and end is not None and end < start:
+            self.add_error('end_seconds', _('End time must be greater than or equal to start time.'))
+        return cleaned
 
 
 class ObservationSessionForm(forms.ModelForm):

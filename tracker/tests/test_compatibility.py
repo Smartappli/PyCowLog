@@ -202,4 +202,4 @@ class CompatibilityTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content.decode('utf-8'))
-        self.assertEqual(payload['schema'], 'pybehaviorlog-0.9-session-compatibility-report')
+        self.assertEqual(payload['schema'], 'pybehaviorlog-0.9.1-session-compatibility-report')

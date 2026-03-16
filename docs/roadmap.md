@@ -1,4 +1,4 @@
-# PyBehaviorLog 0.9 operational roadmap
+# PyBehaviorLog 0.9.1 operational roadmap
 
 Version 0.9 focuses on project lifecycle operations rather than adding another isolated coding feature.
 

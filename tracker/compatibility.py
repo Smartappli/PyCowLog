@@ -40,6 +40,7 @@ def _resolve_event_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if schema in {
         'cowlog-results-v1',
         'pybehaviorlog-0.9-session',
+        'pybehaviorlog-0.9.1-session',
         'pybehaviorlog-0.8.3-session',
         'pybehaviorlog-0.8-session',
         'boris-tabular-csv-v1',
@@ -70,6 +71,21 @@ def _resolve_annotation_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
         first = observations[0]
         if isinstance(first, dict):
             return [item for item in first.get('annotations', []) if isinstance(item, dict)]
+    return []
+
+
+
+
+def _resolve_segment_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    if payload.get('schema', '').startswith('pybehaviorlog-'):
+        return [item for item in payload.get('segments', []) if isinstance(item, dict)]
+    observations = payload.get('observations')
+    if isinstance(observations, dict):
+        observations = list(observations.values())
+    if isinstance(observations, list) and observations:
+        first = observations[0]
+        if isinstance(first, dict):
+            return [item for item in first.get('segments', []) if isinstance(item, dict)]
     return []
 
 
@@ -106,6 +122,15 @@ def normalize_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
             }
         )
     annotations.sort(key=lambda item: (item['time'], item['text']))
+    segments = []
+    for item in _resolve_segment_items(payload):
+        segments.append({
+            'title': str(item.get('title') or ''),
+            'start': _normalize_time(item.get('start_seconds') or item.get('start')),
+            'end': _normalize_time(item.get('end_seconds') or item.get('end')),
+            'status': str(item.get('status') or ''),
+        })
+    segments.sort(key=lambda item: (item['start'], item['end'], item['title']))
     variables = payload.get('variables') or payload.get('independent_variables') or {}
     if not isinstance(variables, dict):
         variables = {}
@@ -115,6 +140,7 @@ def normalize_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
         'annotations': annotations,
         'variables': {str(key): str(value) for key, value in sorted(variables.items())},
         'media_paths': sorted(_string_list(payload.get('media_paths') or payload.get('image_paths'))),
+        'segments': segments,
     }
 
 
@@ -131,6 +157,8 @@ def compare_session_payloads(expected: dict[str, Any], actual: dict[str, Any]) -
         mismatches.append('variables')
     if expected_normalized.get('media_paths') != actual_normalized.get('media_paths'):
         mismatches.append('media_paths')
+    if expected_normalized.get('segments') != actual_normalized.get('segments'):
+        mismatches.append('segments')
     return {
         'equivalent': not mismatches,
         'mismatches': mismatches,

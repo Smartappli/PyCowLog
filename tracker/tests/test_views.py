@@ -10,6 +10,7 @@ from django.urls import reverse
 from tracker.models import (
     Behavior,
     KeyboardProfile,
+    ObservationSegment,
     ObservationSession,
     Project,
     ProjectMembership,
@@ -91,7 +92,7 @@ class ViewTests(TestCase):
 
         export_response = self.client.get(reverse('tracker:session_export_json', args=[session.pk]))
         self.assertEqual(export_response.status_code, 200)
-        self.assertIn('pybehaviorlog-0.9-session', export_response.content.decode('utf-8'))
+        self.assertIn('pybehaviorlog-0.9.1-session', export_response.content.decode('utf-8'))
 
     def test_event_update_and_delete_api(self):
         session = self.project.sessions.create(
@@ -241,7 +242,7 @@ class ViewTests(TestCase):
     def test_project_import_boris_json_view(self):
         payload = {
             'schema': 'boris-project-v3',
-            'ethogram': {'schema': 'pybehaviorlog-0.9-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
+            'ethogram': {'schema': 'pybehaviorlog-0.9.1-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
             'subject_groups': [{'name': 'Imported group', 'description': '', 'color': '#123456', 'sort_order': 1}],
             'subjects': [{'name': 'Imported subject', 'description': '', 'key_binding': 's', 'color': '#654321', 'sort_order': 1, 'groups': ['Imported group']}],
             'variables': [{'label': 'Weight', 'description': '', 'value_type': 'numeric', 'set_values': [], 'default_value': '0', 'sort_order': 1}],
@@ -317,7 +318,7 @@ class ViewTests(TestCase):
         payload = {
             'schema': 'boris-project-v2',
             'ethogram': {
-                'schema': 'pybehaviorlog-0.9-ethogram',
+                'schema': 'pybehaviorlog-0.9.1-ethogram',
                 'categories': {'General': {'color': '#111111', 'sort_order': 1}},
                 'modifiers': {'Near': {'description': 'proximity', 'key': 'n', 'sort_order': 1}},
                 'behaviors': {'Imported code': {'description': '', 'key': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': {'name': 'General'}}},
@@ -359,3 +360,57 @@ class ViewTests(TestCase):
         response = self.client.get(reverse('tracker:session_player', args=[session.pk]))
         self.assertContains(response, 'event-editor')
         self.assertContains(response, 'fix-unpaired-btn')
+
+
+    def test_review_queue_and_segment_crud(self):
+        session = self.project.sessions.create(title='Segment session', observer=self.user, session_kind='live')
+        reviewer_client = Client()
+        reviewer_client.login(username='reviewer', password='pass12345')
+        create_response = reviewer_client.post(
+            reverse('tracker:segment_create', args=[session.pk]),
+            data={
+                'title': 'Intro',
+                'start_seconds': '0',
+                'end_seconds': '12.5',
+                'status': 'todo',
+                'assignee': self.user.pk,
+                'reviewer': self.reviewer.pk,
+                'notes': 'Check the opening phase',
+            },
+        )
+        self.assertEqual(create_response.status_code, 302)
+        segment = ObservationSegment.objects.get(session=session)
+        queue_response = reviewer_client.get(reverse('tracker:review_queue'), {'filter': 'review'})
+        self.assertEqual(queue_response.status_code, 200)
+        self.assertContains(queue_response, 'Intro')
+        update_response = reviewer_client.post(
+            reverse('tracker:segment_update', args=[segment.pk]),
+            data={
+                'title': 'Intro',
+                'start_seconds': '0',
+                'end_seconds': '10',
+                'status': 'done',
+                'assignee': self.user.pk,
+                'reviewer': self.reviewer.pk,
+                'notes': 'Reviewed',
+            },
+        )
+        self.assertEqual(update_response.status_code, 302)
+        segment.refresh_from_db()
+        self.assertEqual(segment.status, ObservationSegment.STATUS_DONE)
+
+    def test_session_export_json_contains_segments(self):
+        session = self.project.sessions.create(title='Segment export', observer=self.user, session_kind='live')
+        ObservationSegment.objects.create(
+            session=session,
+            title='A',
+            start_seconds='1.0',
+            end_seconds='2.0',
+            status=ObservationSegment.STATUS_TODO,
+            assignee=self.user,
+            reviewer=self.reviewer,
+        )
+        response = self.client.get(reverse('tracker:session_export_json', args=[session.pk]))
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['segments'][0]['title'], 'A')

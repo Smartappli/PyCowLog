@@ -232,6 +232,37 @@
 
         <article>
             <div class="section-headline">
+                <h3>{% trans 'Review segments' %}</h3>
+                {% if can_review_session %}<a href="{% url 'tracker:segment_create' session.pk %}" class="secondary" role="button">{% trans 'New segment' %}</a>{% endif %}
+            </div>
+            <div class="table-wrapper compact-table-wrapper">
+                <table>
+                    <thead><tr><th>{% trans 'Title' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
+                    <tbody>
+                    {% for segment in segments %}
+                        <tr>
+                            <td>{{ segment.title }}</td>
+                            <td>{{ segment.start_seconds }}s → {{ segment.end_seconds }}s</td>
+                            <td>{{ segment.get_status_display }}</td>
+                            <td>{{ segment.assignee.username|default:'—' }}</td>
+                            <td>{{ segment.reviewer.username|default:'—' }}</td>
+                            <td>
+                                {% if can_review_session %}
+                                    <a href="{% url 'tracker:segment_update' segment.pk %}">{% trans 'Edit' %}</a>
+                                    <a href="{% url 'tracker:segment_delete' segment.pk %}">{% trans 'Delete' %}</a>
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6">{% trans 'No review segments defined yet.' %}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article>
+            <div class="section-headline">
                 <h3>{% trans 'Workflow and audit' %}</h3>
                 <span class="pill">{{ session.get_workflow_status_display }}</span>
             </div>

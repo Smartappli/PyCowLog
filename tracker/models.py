@@ -517,6 +517,53 @@ class SessionVideoLink(models.Model):
         return f'{self.session.title} - {self.video.title}'
 
 
+class ObservationSegment(models.Model):
+    STATUS_TODO = 'todo'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_DONE = 'done'
+    STATUS_CHOICES = [
+        (STATUS_TODO, _('To do')),
+        (STATUS_IN_PROGRESS, _('In progress')),
+        (STATUS_DONE, _('Done')),
+    ]
+
+    session = models.ForeignKey(
+        ObservationSession, on_delete=models.CASCADE, related_name='segments'
+    )
+    title = models.CharField(max_length=160)
+    start_seconds = models.DecimalField(max_digits=10, decimal_places=3)
+    end_seconds = models.DecimalField(max_digits=10, decimal_places=3)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_TODO)
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_observation_segments',
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review_observation_segments',
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['start_seconds', 'end_seconds', 'pk']
+
+    def __str__(self) -> str:
+        return f'{self.session.title} - {self.title} [{self.start_seconds}, {self.end_seconds}]'
+
+    @property
+    def duration_seconds(self) -> float:
+        return round(float(self.end_seconds - self.start_seconds), 3)
+
+
+
 class ObservationEvent(models.Model):
     KIND_POINT = 'point'
     KIND_START = 'start'

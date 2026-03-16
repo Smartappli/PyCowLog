@@ -8,9 +8,9 @@ import math
 import re
 import wave
 import zipfile
-from pathlib import Path
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth import login
@@ -35,6 +35,7 @@ from .forms import (
     IndependentVariableDefinitionForm,
     KeyboardProfileForm,
     ModifierForm,
+    ObservationSegmentForm,
     ObservationSessionForm,
     ObservationTemplateForm,
     ProjectBORISImportForm,
@@ -57,6 +58,7 @@ from .models import (
     Modifier,
     ObservationAuditLog,
     ObservationEvent,
+    ObservationSegment,
     ObservationSession,
     ObservationTemplate,
     ObservationVariableValue,
@@ -86,9 +88,7 @@ def signup(request):  # pragma: no cover
 def accessible_projects_qs(user):
     """Return every project visible to the current authenticated user."""
     return (
-        Project.objects.filter(
-            Q(owner=user) | Q(collaborators=user) | Q(memberships__user=user)
-        )
+        Project.objects.filter(Q(owner=user) | Q(collaborators=user) | Q(memberships__user=user))
         .distinct()
         .select_related('owner')
         .prefetch_related('collaborators', 'memberships__user', 'keyboard_profiles')
@@ -128,7 +128,7 @@ def build_release_metadata() -> dict:
     """Return a small machine-readable release description for health and ops tooling."""
     return {
         'application': 'PyBehaviorLog',
-        'version': '0.9',
+        'version': '0.9.1',
         'django_target': '6.0.3',
         'python_minimum': '3.13',
         'asgi': True,
@@ -139,8 +139,7 @@ def build_release_metadata() -> dict:
     }
 
 
-
-def clone_project(
+def clone_project(  # pragma: no cover
     source: Project,
     *,
     owner,
@@ -197,7 +196,9 @@ def clone_project(
                 color=subject.color,
                 sort_order=subject.sort_order,
             )
-            new_subject.groups.set([group_map[group.pk] for group in subject.groups.all() if group.pk in group_map])
+            new_subject.groups.set(
+                [group_map[group.pk] for group in subject.groups.all() if group.pk in group_map]
+            )
             subject_map[subject.pk] = new_subject
 
         variable_map = {}
@@ -225,17 +226,39 @@ def clone_project(
                 sort_order=behavior.sort_order,
             )
 
-        for template in source.observation_templates.order_by('name').prefetch_related('behaviors', 'modifiers', 'subjects', 'variable_definitions'):
+        for template in source.observation_templates.order_by('name').prefetch_related(
+            'behaviors', 'modifiers', 'subjects', 'variable_definitions'
+        ):
             new_template = ObservationTemplate.objects.create(
                 project=cloned,
                 name=template.name,
                 description=template.description,
                 default_session_kind=template.default_session_kind,
             )
-            new_template.behaviors.set([behavior_map[item.pk] for item in template.behaviors.all() if item.pk in behavior_map])
-            new_template.modifiers.set([modifier_map[item.pk] for item in template.modifiers.all() if item.pk in modifier_map])
-            new_template.subjects.set([subject_map[item.pk] for item in template.subjects.all() if item.pk in subject_map])
-            new_template.variable_definitions.set([variable_map[item.pk] for item in template.variable_definitions.all() if item.pk in variable_map])
+            new_template.behaviors.set(
+                [
+                    behavior_map[item.pk]
+                    for item in template.behaviors.all()
+                    if item.pk in behavior_map
+                ]
+            )
+            new_template.modifiers.set(
+                [
+                    modifier_map[item.pk]
+                    for item in template.modifiers.all()
+                    if item.pk in modifier_map
+                ]
+            )
+            new_template.subjects.set(
+                [subject_map[item.pk] for item in template.subjects.all() if item.pk in subject_map]
+            )
+            new_template.variable_definitions.set(
+                [
+                    variable_map[item.pk]
+                    for item in template.variable_definitions.all()
+                    if item.pk in variable_map
+                ]
+            )
 
         profile_map = {}
         for profile in source.keyboard_profiles.order_by('name'):
@@ -264,13 +287,28 @@ def clone_project(
             template_map = {item.name: item for item in cloned.observation_templates.all()}
             session_video_links = []
             annotation_rows = []
+            segment_rows = []
+            session_map = {}
             m2m_event_modifiers = []
             m2m_event_subjects = []
-            for session in source.sessions.order_by('created_at').select_related('video', 'template', 'keyboard_profile', 'observer').prefetch_related('events__modifiers', 'events__subjects', 'annotations', 'video_links__video', 'variable_values__definition'):
+            for session in (
+                source.sessions.order_by('created_at')
+                .select_related('video', 'template', 'keyboard_profile', 'observer')
+                .prefetch_related(
+                    'events__modifiers',
+                    'events__subjects',
+                    'annotations',
+                    'segments',
+                    'video_links__video',
+                    'variable_values__definition',
+                )
+            ):
                 new_session = ObservationSession.objects.create(
                     project=cloned,
                     video=video_map.get(session.video_id),
-                    template=template_map.get(session.template.name) if session.template_id else None,
+                    template=template_map.get(session.template.name)
+                    if session.template_id
+                    else None,
                     keyboard_profile=profile_map.get(session.keyboard_profile_id),
                     session_kind=session.session_kind,
                     workflow_status=session.workflow_status,
@@ -286,6 +324,7 @@ def clone_project(
                     frame_step_seconds=session.frame_step_seconds,
                     recorded_at=session.recorded_at,
                 )
+                session_map[session.pk] = new_session
                 for value in session.variable_values.all():
                     if value.definition_id in variable_map:
                         ObservationVariableValue.objects.create(
@@ -295,11 +334,13 @@ def clone_project(
                         )
                 for link in session.video_links.all():
                     if link.video_id in video_map:
-                        session_video_links.append(SessionVideoLink(
-                            session=new_session,
-                            video=video_map[link.video_id],
-                            sort_order=link.sort_order,
-                        ))
+                        session_video_links.append(
+                            SessionVideoLink(
+                                session=new_session,
+                                video=video_map[link.video_id],
+                                sort_order=link.sort_order,
+                            )
+                        )
                 event_map = {}
                 for event in session.events.all():
                     new_event = ObservationEvent.objects.create(
@@ -312,21 +353,56 @@ def clone_project(
                         comment=event.comment,
                     )
                     event_map[event.pk] = new_event
-                    m2m_event_modifiers.append((new_event, [modifier_map[item.pk] for item in event.modifiers.all() if item.pk in modifier_map]))
-                    m2m_event_subjects.append((new_event, [subject_map[item.pk] for item in event.subjects.all() if item.pk in subject_map]))
+                    m2m_event_modifiers.append(
+                        (
+                            new_event,
+                            [
+                                modifier_map[item.pk]
+                                for item in event.modifiers.all()
+                                if item.pk in modifier_map
+                            ],
+                        )
+                    )
+                    m2m_event_subjects.append(
+                        (
+                            new_event,
+                            [
+                                subject_map[item.pk]
+                                for item in event.subjects.all()
+                                if item.pk in subject_map
+                            ],
+                        )
+                    )
                 for annotation in session.annotations.all():
-                    annotation_rows.append(SessionAnnotation(
-                        session=new_session,
-                        timestamp_seconds=annotation.timestamp_seconds,
-                        title=annotation.title,
-                        note=annotation.note,
-                        color=annotation.color,
-                        created_by=owner,
-                    ))
+                    annotation_rows.append(
+                        SessionAnnotation(
+                            session=new_session,
+                            timestamp_seconds=annotation.timestamp_seconds,
+                            title=annotation.title,
+                            note=annotation.note,
+                            color=annotation.color,
+                            created_by=owner,
+                        )
+                    )
+                for segment in session.segments.all():
+                    segment_rows.append(
+                        ObservationSegment(
+                            session=new_session,
+                            title=segment.title,
+                            start_seconds=segment.start_seconds,
+                            end_seconds=segment.end_seconds,
+                            status=segment.status,
+                            assignee=owner if segment.assignee_id else None,
+                            reviewer=owner if segment.reviewer_id else None,
+                            notes=segment.notes,
+                        )
+                    )
             if session_video_links:
                 SessionVideoLink.objects.bulk_create(session_video_links)
             if annotation_rows:
                 SessionAnnotation.objects.bulk_create(annotation_rows)
+            if segment_rows:
+                ObservationSegment.objects.bulk_create(segment_rows)
             for event, modifiers in m2m_event_modifiers:
                 if modifiers:
                     event.modifiers.set(modifiers)
@@ -375,21 +451,53 @@ def get_accessible_session(user, pk: int) -> ObservationSession:
     return get_object_or_404(session_qs, pk=pk)
 
 
+def build_review_queue(user) -> dict:
+    projects = accessible_projects_qs(user)
+    segments = list(
+        ObservationSegment.objects.filter(session__project__in=projects)
+        .select_related('session', 'session__project', 'assignee', 'reviewer')
+        .order_by('status', 'session__project__name', 'session__title', 'start_seconds')
+    )
+    outstanding = [
+        segment for segment in segments if segment.status != ObservationSegment.STATUS_DONE
+    ]
+    assigned = [segment for segment in outstanding if segment.assignee_id == user.id]
+    review = [segment for segment in outstanding if segment.reviewer_id == user.id]
+    return {
+        'all': segments,
+        'outstanding': outstanding,
+        'assigned': assigned,
+        'review': review,
+        'counts': {
+            'all': len(segments),
+            'outstanding': len(outstanding),
+            'assigned': len(assigned),
+            'review': len(review),
+        },
+    }
+
+
 def _get_owned_category(user, pk: int) -> BehaviorCategory:
     category = get_object_or_404(BehaviorCategory.objects.select_related('project'), pk=pk)
-    _require_project_editor(user, category.project, _('You need editor permissions to manage categories.'))
+    _require_project_editor(
+        user, category.project, _('You need editor permissions to manage categories.')
+    )
     return category
 
 
 def _get_owned_modifier(user, pk: int) -> Modifier:
     modifier = get_object_or_404(Modifier.objects.select_related('project'), pk=pk)
-    _require_project_editor(user, modifier.project, _('You need editor permissions to manage modifiers.'))
+    _require_project_editor(
+        user, modifier.project, _('You need editor permissions to manage modifiers.')
+    )
     return modifier
 
 
 def _get_owned_behavior(user, pk: int) -> Behavior:
     behavior = get_object_or_404(Behavior.objects.select_related('project', 'category'), pk=pk)
-    _require_project_editor(user, behavior.project, _('You need editor permissions to manage behaviors.'))
+    _require_project_editor(
+        user, behavior.project, _('You need editor permissions to manage behaviors.')
+    )
     return behavior
 
 
@@ -454,8 +562,6 @@ def _session_duration(
     return max(candidates)
 
 
-
-
 def _relative_media_path(video: VideoAsset | None) -> str | None:
     """Return a storage-relative media path for interoperability exports."""
     if video is None or not getattr(video, 'file', None):
@@ -501,7 +607,9 @@ def _downsample(values: list[float], target_points: int) -> list[float]:
     return results[:target_points]
 
 
-def _wav_visual_summary(file_path: Path, *, points: int = 96, spectrogram_columns: int = 24, spectrogram_rows: int = 8) -> dict:
+def _wav_visual_summary(
+    file_path: Path, *, points: int = 96, spectrogram_columns: int = 24, spectrogram_rows: int = 8
+) -> dict:
     """Build a lightweight waveform and coarse spectrogram for WAV files using stdlib only."""
     try:
         with wave.open(str(file_path), 'rb') as wav_file:
@@ -542,8 +650,14 @@ def _wav_visual_summary(file_path: Path, *, points: int = 96, spectrogram_column
     if window_size < 8:
         window_size = min(len(samples), 8)
     max_start = max(len(samples) - window_size, 0)
-    column_starts = [int(round(max_start * index / max(spectrogram_columns - 1, 1))) for index in range(spectrogram_columns)]
-    frequency_bins = [1 + index * max(window_size // (2 * spectrogram_rows), 1) for index in range(spectrogram_rows)]
+    column_starts = [
+        int(round(max_start * index / max(spectrogram_columns - 1, 1)))
+        for index in range(spectrogram_columns)
+    ]
+    frequency_bins = [
+        1 + index * max(window_size // (2 * spectrogram_rows), 1)
+        for index in range(spectrogram_rows)
+    ]
     for start in column_starts:
         window = samples[start : start + window_size]
         if len(window) < window_size:
@@ -581,7 +695,11 @@ def _image_sequence_summary(file_path: Path | None, *, limit: int = 12) -> dict:
     parent = file_path.parent
     stem = file_path.stem
     prefix = re.sub(r'\d+$', '', stem)
-    pattern = re.compile(rf'^{re.escape(prefix)}\d*{re.escape(suffix)}$', re.IGNORECASE) if prefix else None
+    pattern = (
+        re.compile(rf'^{re.escape(prefix)}\d*{re.escape(suffix)}$', re.IGNORECASE)
+        if prefix
+        else None
+    )
     siblings = []
     for candidate in sorted(parent.iterdir()):
         if not candidate.is_file():
@@ -619,13 +737,20 @@ def build_media_analysis(session: ObservationSession) -> list[dict]:
             'relative_path': relative_path,
             'media_kind': _media_kind_from_name(relative_path),
             'file_exists': bool(storage_path and storage_path.exists()),
-            'size_bytes': storage_path.stat().st_size if storage_path and storage_path.exists() else None,
+            'size_bytes': storage_path.stat().st_size
+            if storage_path and storage_path.exists()
+            else None,
             'waveform': [],
             'spectrogram': [],
             'audio_summary': {'available': False, 'reason': 'not-audio'},
             'image_sequence': {'available': False, 'reason': 'not-image'},
         }
-        if item['media_kind'] == 'audio' and storage_path and storage_path.exists() and storage_path.suffix.lower() == '.wav':
+        if (
+            item['media_kind'] == 'audio'
+            and storage_path
+            and storage_path.exists()
+            and storage_path.suffix.lower() == '.wav'
+        ):
             audio_summary = _wav_visual_summary(storage_path)
             item['audio_summary'] = audio_summary
             item['waveform'] = audio_summary.get('waveform', [])
@@ -705,8 +830,16 @@ def _create_event_from_snapshot(session: ObservationSession, snapshot: dict) -> 
         comment=(snapshot.get('comment') or '').strip(),
         subject_id=snapshot.get('subject_id') or None,
     )
-    modifier_ids = [int(item['id']) for item in snapshot.get('modifiers', []) if isinstance(item, dict) and item.get('id')]
-    subject_ids = [int(item['id']) for item in snapshot.get('subjects', []) if isinstance(item, dict) and item.get('id')]
+    modifier_ids = [
+        int(item['id'])
+        for item in snapshot.get('modifiers', [])
+        if isinstance(item, dict) and item.get('id')
+    ]
+    subject_ids = [
+        int(item['id'])
+        for item in snapshot.get('subjects', [])
+        if isinstance(item, dict) and item.get('id')
+    ]
     if modifier_ids:
         event.modifiers.set(Modifier.objects.filter(project=session.project, pk__in=modifier_ids))
     if subject_ids:
@@ -740,17 +873,38 @@ def _apply_history_entry(session: ObservationSession, entry: dict, *, direction:
             return 'delete'
     if action == ObservationAuditLog.ACTION_UPDATE and before and after:
         snapshot = before if direction == 'undo' else after
-        event = get_object_or_404(ObservationEvent, session=session, pk=(after.get('id') or before.get('id')) )
-        behavior = get_object_or_404(Behavior, project=session.project, pk=snapshot.get('behavior_id'))
+        event = get_object_or_404(
+            ObservationEvent, session=session, pk=(after.get('id') or before.get('id'))
+        )
+        behavior = get_object_or_404(
+            Behavior, project=session.project, pk=snapshot.get('behavior_id')
+        )
         event.behavior = behavior
         event.event_kind = snapshot.get('event_kind') or event.event_kind
         event.timestamp_seconds = _decimal(snapshot.get('timestamp_seconds'), default='0')
         event.frame_index = snapshot.get('frame_index') or None
         event.comment = (snapshot.get('comment') or '').strip()
         event.subject_id = snapshot.get('subject_id') or None
-        event.save(update_fields=['behavior', 'event_kind', 'timestamp_seconds', 'frame_index', 'comment', 'subject'])
-        modifier_ids = [int(item['id']) for item in snapshot.get('modifiers', []) if isinstance(item, dict) and item.get('id')]
-        subject_ids = [int(item['id']) for item in snapshot.get('subjects', []) if isinstance(item, dict) and item.get('id')]
+        event.save(
+            update_fields=[
+                'behavior',
+                'event_kind',
+                'timestamp_seconds',
+                'frame_index',
+                'comment',
+                'subject',
+            ]
+        )
+        modifier_ids = [
+            int(item['id'])
+            for item in snapshot.get('modifiers', [])
+            if isinstance(item, dict) and item.get('id')
+        ]
+        subject_ids = [
+            int(item['id'])
+            for item in snapshot.get('subjects', [])
+            if isinstance(item, dict) and item.get('id')
+        ]
         event.modifiers.set(Modifier.objects.filter(project=session.project, pk__in=modifier_ids))
         subjects = list(Subject.objects.filter(project=session.project, pk__in=subject_ids))
         event.subjects.set(subjects)
@@ -759,6 +913,7 @@ def _apply_history_entry(session: ObservationSession, entry: dict, *, direction:
             event.save(update_fields=['subject'])
         return 'update'
     raise ValueError(_('No undo or redo information is available for this operation.'))
+
 
 def serialize_event(event: ObservationEvent) -> dict:
     modifiers = list(
@@ -803,6 +958,20 @@ def serialize_annotation(annotation: SessionAnnotation) -> dict:
         'color': annotation.color,
         'created_by': annotation.created_by.username if annotation.created_by else '',
         'created_at': annotation.created_at.isoformat(),
+    }
+
+
+def serialize_segment(segment: ObservationSegment) -> dict:
+    return {
+        'id': segment.pk,
+        'title': segment.title,
+        'start_seconds': float(segment.start_seconds),
+        'end_seconds': float(segment.end_seconds),
+        'duration_seconds': segment.duration_seconds,
+        'status': segment.status,
+        'assignee': segment.assignee.username if segment.assignee else '',
+        'reviewer': segment.reviewer.username if segment.reviewer else '',
+        'notes': segment.notes,
     }
 
 
@@ -1013,11 +1182,13 @@ def build_track_rows(
     for event in session.events.all():
         track = tracks[event.behavior_id]
         if event.event_kind == ObservationEvent.KIND_POINT:
-            track['points'].append({
-                'event_id': event.id,
-                'seconds': float(event.timestamp_seconds),
-                'label': event.behavior.name,
-            })
+            track['points'].append(
+                {
+                    'event_id': event.id,
+                    'seconds': float(event.timestamp_seconds),
+                    'label': event.behavior.name,
+                }
+            )
             continue
         if event.event_kind == ObservationEvent.KIND_START:
             open_states[event.behavior_id] = event.timestamp_seconds
@@ -1027,7 +1198,17 @@ def build_track_rows(
             segment = {
                 'start_seconds': float(start_time),
                 'end_seconds': float(event.timestamp_seconds),
-                'start_event_id': next((item.id for item in session.events.filter(behavior_id=event.behavior_id, event_kind=ObservationEvent.KIND_START, timestamp_seconds=start_time).order_by('pk')), None),
+                'start_event_id': next(
+                    (
+                        item.id
+                        for item in session.events.filter(
+                            behavior_id=event.behavior_id,
+                            event_kind=ObservationEvent.KIND_START,
+                            timestamp_seconds=start_time,
+                        ).order_by('pk')
+                    ),
+                    None,
+                ),
                 'stop_event_id': event.id,
                 'open': False,
             }
@@ -1045,7 +1226,17 @@ def build_track_rows(
             segment = {
                 'start_seconds': float(start_time),
                 'end_seconds': float(duration),
-                'start_event_id': next((item.id for item in session.events.filter(behavior_id=behavior.id, event_kind=ObservationEvent.KIND_START, timestamp_seconds=start_time).order_by('pk')), None),
+                'start_event_id': next(
+                    (
+                        item.id
+                        for item in session.events.filter(
+                            behavior_id=behavior.id,
+                            event_kind=ObservationEvent.KIND_START,
+                            timestamp_seconds=start_time,
+                        ).order_by('pk')
+                    ),
+                    None,
+                ),
                 'stop_event_id': None,
                 'open': True,
             }
@@ -1315,8 +1506,6 @@ def build_project_statistics(project: Project) -> dict:
     }
 
 
-
-
 def build_keyboard_profile_payload(project: Project) -> dict[str, dict[str, str]]:
     """Snapshot the current project shortcut assignments into serializable mappings."""
     return {
@@ -1392,7 +1581,9 @@ def build_agreement_analysis(
     p0 = matches / bucket_count
     ref_counts = {label: reference.count(label) for label in labels}
     cmp_counts = {label: comparison.count(label) for label in labels}
-    pe = sum((ref_counts[label] / bucket_count) * (cmp_counts[label] / bucket_count) for label in labels)
+    pe = sum(
+        (ref_counts[label] / bucket_count) * (cmp_counts[label] / bucket_count) for label in labels
+    )
     kappa = None
     if pe < 1:
         kappa = round((p0 - pe) / (1 - pe), 4)
@@ -1434,11 +1625,15 @@ def build_project_boris_payload(project: Project) -> dict:
                 {
                     'name': subject.name,
                     'description': subject.description,
-                    'groups': [group.name for group in subject.groups.order_by('sort_order', 'name')],
+                    'groups': [
+                        group.name for group in subject.groups.order_by('sort_order', 'name')
+                    ],
                     'key_binding': subject.key_binding,
                     'color': subject.color,
                 }
-                for subject in project.subjects.prefetch_related('groups').order_by('sort_order', 'name')
+                for subject in project.subjects.prefetch_related('groups').order_by(
+                    'sort_order', 'name'
+                )
             ],
             'subject_groups': [
                 {
@@ -1463,10 +1658,26 @@ def build_project_boris_payload(project: Project) -> dict:
                     'name': template.name,
                     'description': template.description,
                     'default_session_kind': template.default_session_kind,
-                    'behaviors': list(template.behaviors.order_by('sort_order', 'name').values_list('name', flat=True)),
-                    'modifiers': list(template.modifiers.order_by('sort_order', 'name').values_list('name', flat=True)),
-                    'subjects': list(template.subjects.order_by('sort_order', 'name').values_list('name', flat=True)),
-                    'variable_definitions': list(template.variable_definitions.order_by('sort_order', 'label').values_list('label', flat=True)),
+                    'behaviors': list(
+                        template.behaviors.order_by('sort_order', 'name').values_list(
+                            'name', flat=True
+                        )
+                    ),
+                    'modifiers': list(
+                        template.modifiers.order_by('sort_order', 'name').values_list(
+                            'name', flat=True
+                        )
+                    ),
+                    'subjects': list(
+                        template.subjects.order_by('sort_order', 'name').values_list(
+                            'name', flat=True
+                        )
+                    ),
+                    'variable_definitions': list(
+                        template.variable_definitions.order_by('sort_order', 'label').values_list(
+                            'label', flat=True
+                        )
+                    ),
                 }
                 for template in project.observation_templates.prefetch_related(
                     'behaviors', 'modifiers', 'subjects', 'variable_definitions'
@@ -1495,8 +1706,12 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
     files: dict[str, bytes] = {
         'ethogram.json': json.dumps(ethogram_payload, indent=2, ensure_ascii=False).encode('utf-8'),
         'analytics.json': json.dumps(analytics, indent=2, ensure_ascii=False).encode('utf-8'),
-        'boris_project.json': json.dumps(boris_payload, indent=2, ensure_ascii=False).encode('utf-8'),
-        'compatibility_report.json': json.dumps(compatibility_payload, indent=2, ensure_ascii=False).encode('utf-8'),
+        'boris_project.json': json.dumps(boris_payload, indent=2, ensure_ascii=False).encode(
+            'utf-8'
+        ),
+        'compatibility_report.json': json.dumps(
+            compatibility_payload, indent=2, ensure_ascii=False
+        ).encode('utf-8'),
     }
     session_meta = []
     for session in project.sessions.order_by('title'):
@@ -1508,21 +1723,23 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         files[compatibility_name] = json.dumps(
             build_session_compatibility_report(accessible_session), indent=2, ensure_ascii=False
         ).encode('utf-8')
-        session_meta.append({
-            'id': session.pk,
-            'title': session.title,
-            'filename': filename,
-            'compatibility_filename': compatibility_name,
-            'media_paths': [
-                _relative_media_path(video)
-                for video in accessible_session.all_videos_ordered
-                if _relative_media_path(video)
-            ],
-        })
+        session_meta.append(
+            {
+                'id': session.pk,
+                'title': session.title,
+                'filename': filename,
+                'compatibility_filename': compatibility_name,
+                'media_paths': [
+                    _relative_media_path(video)
+                    for video in accessible_session.all_videos_ordered
+                    if _relative_media_path(video)
+                ],
+            }
+        )
 
     manifest = {
-        'schema': 'pybehaviorlog-0.9-bundle',
-        'version': '0.9',
+        'schema': 'pybehaviorlog-0.9.1-bundle',
+        'version': '0.9.1',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1530,18 +1747,10 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         },
         'exported_at': timezone.now().isoformat(),
         'sessions': session_meta,
-        'checksums': {
-            name: hashlib.sha256(content).hexdigest() for name, content in files.items()
-        },
+        'checksums': {name: hashlib.sha256(content).hexdigest() for name, content in files.items()},
     }
     files['manifest.json'] = json.dumps(manifest, indent=2, ensure_ascii=False).encode('utf-8')
     return files
-
-
-
-
-
-
 
 
 def _format_seconds_token(value: str | float | Decimal) -> str:
@@ -1551,16 +1760,15 @@ def _format_seconds_token(value: str | float | Decimal) -> str:
     return token.rstrip('0').rstrip('.') or '0'
 
 
-
 def _build_event_interval_rows(session: ObservationSession) -> list[dict]:
     """Return normalized interval/point rows used by interoperability exports."""
     rows: list[dict] = []
     open_states: dict[tuple[int, str], dict] = {}
     end_time = _session_duration(session)
     ordered_events = list(
-        session.events.select_related('behavior', 'behavior__category').prefetch_related(
-            'subjects', 'subjects__groups', 'modifiers'
-        ).order_by('timestamp_seconds', 'pk')
+        session.events.select_related('behavior', 'behavior__category')
+        .prefetch_related('subjects', 'subjects__groups', 'modifiers')
+        .order_by('timestamp_seconds', 'pk')
     )
     for event in ordered_events:
         subjects = [subject.name for subject in event.all_subjects_ordered] or ['All subjects']
@@ -1574,7 +1782,10 @@ def _build_event_interval_rows(session: ObservationSession) -> list[dict]:
             'modifiers': modifiers,
             'comment': event.comment,
         }
-        if event.event_kind == ObservationEvent.KIND_POINT or event.behavior.mode == Behavior.MODE_POINT:
+        if (
+            event.event_kind == ObservationEvent.KIND_POINT
+            or event.behavior.mode == Behavior.MODE_POINT
+        ):
             rows.append(
                 {
                     **base,
@@ -1633,9 +1844,10 @@ def _build_event_interval_rows(session: ObservationSession) -> list[dict]:
                 'stop_event_id': None,
             }
         )
-    rows.sort(key=lambda item: (item['start_seconds'], item['behavior'], ','.join(item['subjects'])))
+    rows.sort(
+        key=lambda item: (item['start_seconds'], item['behavior'], ','.join(item['subjects']))
+    )
     return rows
-
 
 
 def build_behavioral_sequences_text(session: ObservationSession, separator: str = '|') -> str:
@@ -1653,7 +1865,6 @@ def build_behavioral_sequences_text(session: ObservationSession, separator: str 
             lines.append(separator.join(subject_map[subject]))
             lines.append('')
     return '\\n'.join(lines).rstrip() + '\\n'
-
 
 
 def build_textgrid_text(session: ObservationSession) -> str:
@@ -1679,7 +1890,7 @@ def build_textgrid_text(session: ObservationSession) -> str:
                 stop = round(start + 0.001, 3)
             label = row['behavior']
             if row['modifiers']:
-                label = f"{label} [{', '.join(row['modifiers'])}]"
+                label = f'{label} [{", ".join(row["modifiers"])}]'
             intervals.append({'xmin': start, 'xmax': stop, 'text': label.replace('"', "'")})
         tiers.append((subject.replace('"', "'"), intervals))
     lines = [
@@ -1713,7 +1924,6 @@ def build_textgrid_text(session: ObservationSession) -> str:
                 ]
             )
     return '\\n'.join(lines) + '\\n'
-
 
 
 def build_binary_table_rows(
@@ -1753,7 +1963,6 @@ def build_binary_table_rows(
     return rows
 
 
-
 def _token_lookup_map(queryset, *, include_keys: bool = True) -> dict[str, object]:
     lookup: dict[str, object] = {}
     for item in queryset:
@@ -1763,10 +1972,7 @@ def _token_lookup_map(queryset, *, include_keys: bool = True) -> dict[str, objec
     return lookup
 
 
-
-def parse_cowlog_results_text(
-    session: ObservationSession, raw_text: str
-) -> tuple[dict, dict]:
+def parse_cowlog_results_text(session: ObservationSession, raw_text: str) -> tuple[dict, dict]:
     """Parse CowLog-style plain text results into a session import payload."""
     behavior_lookup = _token_lookup_map(session.project.behaviors.all())
     modifier_lookup = _token_lookup_map(session.project.modifiers.all())
@@ -1817,7 +2023,9 @@ def parse_cowlog_results_text(
             subject_names.append(token)
         if behavior.mode == Behavior.MODE_STATE and event_kind == ObservationEvent.KIND_POINT:
             warnings.append(
-                _('Line %(line)s: state behavior %(behavior)s imported as POINT because CowLog text results do not preserve paired state markers by default.')
+                _(
+                    'Line %(line)s: state behavior %(behavior)s imported as POINT because CowLog text results do not preserve paired state markers by default.'
+                )
                 % {'line': line_number, 'behavior': behavior.name}
             )
         events.append(
@@ -1845,9 +2053,6 @@ def parse_cowlog_results_text(
     return payload, report
 
 
-
-
-
 def _normalize_import_header(value: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', str(value or '').strip().casefold()).strip('_')
 
@@ -1873,7 +2078,9 @@ def parse_tabular_session_rows(
             or row.get('elapsed_time')
             or row.get('media_time')
         )
-        stop_token = row.get('stop') or row.get('end') or row.get('stop_time') or row.get('end_time')
+        stop_token = (
+            row.get('stop') or row.get('end') or row.get('stop_time') or row.get('end_time')
+        )
         behavior_token = (
             row.get('behavior')
             or row.get('code')
@@ -1882,7 +2089,11 @@ def parse_tabular_session_rows(
             or row.get('behavior_name')
         )
         note_token = row.get('annotation') or row.get('note') or row.get('text')
-        if behavior_token in {None, ''} and note_token not in {None, ''} and time_token not in {None, ''}:
+        if (
+            behavior_token in {None, ''}
+            and note_token not in {None, ''}
+            and time_token not in {None, ''}
+        ):
             try:
                 note_time = float(str(time_token).replace(',', '.'))
             except ValueError:
@@ -1973,9 +2184,15 @@ def parse_tabular_session_rows(
             'comment': comment,
             'frame_index': frame_index,
         }
-        if behavior.mode == Behavior.MODE_STATE and stop_seconds is not None and stop_seconds >= timestamp:
+        if (
+            behavior.mode == Behavior.MODE_STATE
+            and stop_seconds is not None
+            and stop_seconds >= timestamp
+        ):
             events.append(base_event | {'event_kind': ObservationEvent.KIND_START})
-            events.append(base_event | {'time': stop_seconds, 'event_kind': ObservationEvent.KIND_STOP})
+            events.append(
+                base_event | {'time': stop_seconds, 'event_kind': ObservationEvent.KIND_STOP}
+            )
         else:
             events.append(base_event)
     payload = {
@@ -2007,14 +2224,21 @@ def parse_tabular_session_file(
         headers = [_normalize_import_header(value) for value in rows[0]]
         row_dicts = []
         for row in rows[1:]:
-            row_dicts.append({headers[index]: row[index] for index in range(min(len(headers), len(row)))})
+            row_dicts.append(
+                {headers[index]: row[index] for index in range(min(len(headers), len(row)))}
+            )
         return parse_tabular_session_rows(session, row_dicts, source_format='boris-tabular-xlsx-v1')
 
     try:
         text_payload = raw_bytes.decode('utf-8-sig')
     except UnicodeDecodeError as exc:
         raise ValueError(_('The uploaded tabular file is not valid UTF-8 text.')) from exc
-    delimiter = '	' if ('	' in text_payload.splitlines()[0] if text_payload.splitlines() else False) or filename.endswith('.tsv') else ','
+    delimiter = (
+        '	'
+        if ('	' in text_payload.splitlines()[0] if text_payload.splitlines() else False)
+        or filename.endswith('.tsv')
+        else ','
+    )
     reader = csv.DictReader(io.StringIO(text_payload), delimiter=delimiter)
     if not reader.fieldnames:
         raise ValueError(_('The uploaded tabular file does not contain a header row.'))
@@ -2024,9 +2248,8 @@ def parse_tabular_session_file(
     source_format = 'boris-tabular-tsv-v1' if delimiter == '	' else 'boris-tabular-csv-v1'
     return parse_tabular_session_rows(session, rows, source_format=source_format)
 
-def load_session_import_payload(
-    uploaded_file, session: ObservationSession
-) -> tuple[dict, dict]:
+
+def load_session_import_payload(uploaded_file, session: ObservationSession) -> tuple[dict, dict]:
     """Load session payloads from PyBehaviorLog/BORIS JSON, tabular imports, or CowLog text exports."""
     raw_bytes = uploaded_file.read()
     report = {'warnings': []}
@@ -2049,13 +2272,29 @@ def load_session_import_payload(
     try:
         text_payload = raw_bytes.decode('utf-8-sig')
     except UnicodeDecodeError as exc:
-        raise ValueError(_('The uploaded file is not valid UTF-8 text, spreadsheet, or JSON.')) from exc
+        raise ValueError(
+            _('The uploaded file is not valid UTF-8 text, spreadsheet, or JSON.')
+        ) from exc
     stripped = text_payload.lstrip()
     if stripped.startswith('{') or stripped.startswith('['):
         payload = json.loads(text_payload)
         report['detected_format'] = payload.get('schema', 'json')
         return payload, report
     first_line = text_payload.splitlines()[0] if text_payload.splitlines() else ''
+    first_tokens = [token for token in re.split(r'[\t ]+', first_line.strip()) if token]
+    if first_tokens:
+        try:
+            float(first_tokens[0].replace(',', '.'))
+        except ValueError:
+            first_token_is_time = False
+        else:
+            first_token_is_time = True
+    else:
+        first_token_is_time = False
+    if first_token_is_time and filename.endswith('.txt'):
+        payload, parsed_report = parse_cowlog_results_text(session, text_payload)
+        report.update(parsed_report)
+        return payload, report
     if ',' in first_line or '	' in first_line:
         payload, parsed_report = parse_tabular_session_file(session, uploaded_file, raw_bytes)
         report.update(parsed_report)
@@ -2063,7 +2302,6 @@ def load_session_import_payload(
     payload, parsed_report = parse_cowlog_results_text(session, text_payload)
     report.update(parsed_report)
     return payload, report
-
 
 
 def build_session_compatibility_report(session: ObservationSession) -> dict:
@@ -2076,8 +2314,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
     modifier_event_count = sum(1 for event in ordered_events if event.modifiers.exists())
     multi_subject_event_count = sum(1 for event in ordered_events if event.subjects.count() > 1)
     report = {
-        'schema': 'pybehaviorlog-0.9-session-compatibility-report',
-        'version': '0.9',
+        'schema': 'pybehaviorlog-0.9.1-session-compatibility-report',
+        'version': '0.9.1',
         'session': session.title,
         'boris': {
             'documented_exports': [
@@ -2112,12 +2350,14 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
         'certification': {
             'roundtrip_tested_families': ['boris_observation_json', 'cowlog_plain_text_results'],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.9',
+            'fixture_version': '0.9.1',
         },
     }
     if state_event_count:
         report['cowlog']['warnings'].append(
-            _('CowLog plain-text exports do not preserve paired state semantics with the same fidelity as BORIS JSON.')
+            _(
+                'CowLog plain-text exports do not preserve paired state semantics with the same fidelity as BORIS JSON.'
+            )
         )
     if stats['annotation_count']:
         report['cowlog']['warnings'].append(
@@ -2126,12 +2366,11 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
     return report
 
 
-
 def build_project_compatibility_report(project: Project) -> dict:
     """Summarize project-level exchange coverage for BORIS and CowLog."""
     return {
-        'schema': 'pybehaviorlog-0.9-project-compatibility-report',
-        'version': '0.9',
+        'schema': 'pybehaviorlog-0.9.1-project-compatibility-report',
+        'version': '0.9.1',
         'project': project.name,
         'counts': {
             'sessions': project.sessions.count(),
@@ -2156,13 +2395,21 @@ def build_project_compatibility_report(project: Project) -> dict:
         'supported_cowlog_exports': ['plain_text_results'],
         'supported_boris_imports': ['json_project', 'json_observation', 'csv', 'tsv', 'xlsx'],
         'notes': [
-            _('BORIS interoperability is strongest when using the documented JSON project/observation workflows and tabular exports.'),
-            _('CowLog interoperability currently targets the documented plain-text coding results and keyboard/behavior conventions.'),
+            _(
+                'BORIS interoperability is strongest when using the documented JSON project/observation workflows and tabular exports.'
+            ),
+            _(
+                'CowLog interoperability currently targets the documented plain-text coding results and keyboard/behavior conventions.'
+            ),
         ],
         'certification': {
-            'roundtrip_tested_families': ['boris_project_json', 'boris_observation_json', 'cowlog_plain_text_results'],
+            'roundtrip_tested_families': [
+                'boris_project_json',
+                'boris_observation_json',
+                'cowlog_plain_text_results',
+            ],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.9',
+            'fixture_version': '0.9.1',
         },
         'sample_session_reports': [
             build_session_compatibility_report(session)
@@ -2181,10 +2428,14 @@ def _normalize_named_item(item, default_name: str | None = None, label_mode: boo
         return {key: default_name or str(item)}
     normalized = dict(item)
     if label_mode:
-        normalized.setdefault('label', normalized.get('name') or normalized.get('code') or default_name or '')
+        normalized.setdefault(
+            'label', normalized.get('name') or normalized.get('code') or default_name or ''
+        )
         normalized.setdefault('name', normalized['label'])
     else:
-        normalized.setdefault('name', normalized.get('label') or normalized.get('code') or default_name or '')
+        normalized.setdefault(
+            'name', normalized.get('label') or normalized.get('code') or default_name or ''
+        )
         normalized.setdefault('label', normalized.get('name', ''))
     return normalized
 
@@ -2276,7 +2527,15 @@ def _resolve_event_kind_token(value: str | None) -> str | None:
 
 def _extract_media_labels(item: dict) -> list[str]:
     labels = []
-    for key in ('synced_videos', 'media_files', 'media', 'media_paths', 'image_paths', 'pictures', 'frames'):
+    for key in (
+        'synced_videos',
+        'media_files',
+        'media',
+        'media_paths',
+        'image_paths',
+        'pictures',
+        'frames',
+    ):
         labels.extend(_coerce_name_list(item.get(key)))
     primary = item.get('primary_video') or item.get('media_file') or item.get('media_path')
     if primary:
@@ -2288,7 +2547,6 @@ def _extract_media_labels(item: dict) -> list[str]:
             seen.add(label)
             results.append(label)
     return results
-
 
 
 def load_project_import_payload(uploaded_file) -> tuple[dict, dict[str, dict]]:
@@ -2340,6 +2598,7 @@ def import_project_payload(
         'boris-project-v3',
         'pybehaviorlog-0.8.3-bundle',
         'pybehaviorlog-0.9-bundle',
+        'pybehaviorlog-0.9.1-bundle',
     }:
         raise ValueError(_('Unsupported project payload format.'))
 
@@ -2348,7 +2607,7 @@ def import_project_payload(
         project,
         {
             **ethogram_payload,
-            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.9-ethogram'),
+            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.9.1-ethogram'),
         },
         replace_existing=False,
     )
@@ -2401,15 +2660,15 @@ def import_project_payload(
         subject_map[subject.name] = subject
         subject_count += int(created)
 
-    for item in _coerce_named_items(payload.get('variables') or payload.get('independent_variables'), label_mode=True):
+    for item in _coerce_named_items(
+        payload.get('variables') or payload.get('independent_variables'), label_mode=True
+    ):
         definition, created = IndependentVariableDefinition.objects.update_or_create(
             project=project,
             label=item.get('label') or item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
-                'value_type': item.get(
-                    'value_type', IndependentVariableDefinition.TYPE_TEXT
-                ),
+                'value_type': item.get('value_type', IndependentVariableDefinition.TYPE_TEXT),
                 'set_values': (
                     ', '.join(item.get('set_values', []))
                     if isinstance(item.get('set_values'), list)
@@ -2422,7 +2681,9 @@ def import_project_payload(
         variable_map[definition.label] = definition
         variable_count += int(created)
 
-    for item in _coerce_named_items(payload.get('observation_templates') or payload.get('templates')):
+    for item in _coerce_named_items(
+        payload.get('observation_templates') or payload.get('templates')
+    ):
         template, created = ObservationTemplate.objects.update_or_create(
             project=project,
             name=item['name'],
@@ -2448,12 +2709,18 @@ def import_project_payload(
             ]
         )
         template.subjects.set(
-            [subject_map[name] for name in _coerce_name_list(item.get('subjects')) if name in subject_map]
+            [
+                subject_map[name]
+                for name in _coerce_name_list(item.get('subjects'))
+                if name in subject_map
+            ]
         )
         template.variable_definitions.set(
             [
                 variable_map[name]
-                for name in _coerce_name_list(item.get('variable_definitions') or item.get('variables'))
+                for name in _coerce_name_list(
+                    item.get('variable_definitions') or item.get('variables')
+                )
                 if name in variable_map
             ]
         )
@@ -2472,7 +2739,9 @@ def import_project_payload(
                 or session_payload.get('title')
                 or _('Imported session %(index)s') % {'index': index}
             )
-            synced_titles = _extract_media_labels(observation) or _extract_media_labels(session_payload)
+            synced_titles = _extract_media_labels(observation) or _extract_media_labels(
+                session_payload
+            )
             primary_label = synced_titles[0] if synced_titles else ''
             existing_video = (
                 project.videos.filter(title=primary_label).first() if primary_label else None
@@ -2480,9 +2749,7 @@ def import_project_payload(
             if existing_video is None and not create_live_sessions and primary_label:
                 continue
             session_kind = (
-                ObservationSession.KIND_MEDIA
-                if existing_video
-                else ObservationSession.KIND_LIVE
+                ObservationSession.KIND_MEDIA if existing_video else ObservationSession.KIND_LIVE
             )
             notes_parts = [
                 item
@@ -2548,9 +2815,10 @@ def import_project_payload(
         'annotations_imported': imported_annotation_count,
     }
 
+
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.9-ethogram',
+        'schema': 'pybehaviorlog-0.9.1-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -2632,6 +2900,7 @@ def import_ethogram_payload(
         'pybehaviorlog-0.8-ethogram',
         'pybehaviorlog-0.8.3-ethogram',
         'pybehaviorlog-0.9-ethogram',
+        'pybehaviorlog-0.9.1-ethogram',
         'boris-project-v1',
         'boris-project-v2',
         'boris-project-v3',
@@ -2708,14 +2977,20 @@ def import_ethogram_payload(
         ]
         subject.groups.set(groups)
 
-    for item in _coerce_named_items(payload.get('variables') or payload.get('independent_variables'), label_mode=True):
+    for item in _coerce_named_items(
+        payload.get('variables') or payload.get('independent_variables'), label_mode=True
+    ):
         IndependentVariableDefinition.objects.update_or_create(
             project=project,
             label=item.get('label') or item.get('name') or item.get('code'),
             defaults={
                 'description': item.get('description', ''),
                 'value_type': item.get('value_type', IndependentVariableDefinition.TYPE_TEXT),
-                'set_values': (', '.join(item.get('set_values', [])) if isinstance(item.get('set_values'), list) else item.get('set_values', '')),
+                'set_values': (
+                    ', '.join(item.get('set_values', []))
+                    if isinstance(item.get('set_values'), list)
+                    else item.get('set_values', '')
+                ),
                 'default_value': item.get('default_value', ''),
                 'sort_order': int(item.get('sort_order', 0)),
             },
@@ -2850,7 +3125,11 @@ def _autosize_workbook(workbook: Workbook):  # pragma: no cover
 
 def build_boris_like_payload(session: ObservationSession) -> dict:  # pragma: no cover
     primary_video = session.all_videos_ordered[0] if session.all_videos_ordered else None
-    media_paths = [_relative_media_path(video) for video in session.all_videos_ordered if _relative_media_path(video)]
+    media_paths = [
+        _relative_media_path(video)
+        for video in session.all_videos_ordered
+        if _relative_media_path(video)
+    ]
     image_paths = [path for path in media_paths if _media_kind_from_name(path) == 'image']
     picture_directory = None
     if image_paths:
@@ -2891,6 +3170,10 @@ def build_boris_like_payload(session: ObservationSession) -> dict:  # pragma: no
                     for event in session.events.all()
                 ],
                 'annotations': [serialize_annotation(item) for item in session.annotations.all()],
+                'segments': [
+                    serialize_segment(item)
+                    for item in session.segments.select_related('assignee', 'reviewer').all()
+                ],
             }
         ],
     }
@@ -2903,6 +3186,7 @@ def import_session_payload(
     if clear_existing:
         session.events.all().delete()
         session.annotations.all().delete()
+        session.segments.all().delete()
 
     modifier_map = {item.name: item for item in session.project.modifiers.all()}
     behavior_map = {item.name: item for item in session.project.behaviors.all()}
@@ -2911,6 +3195,7 @@ def import_session_payload(
 
     event_items: list[dict] = []
     annotation_items: list[dict] = []
+    segment_items: list[dict] = []
     variable_items = payload.get('variables', {}) or payload.get('independent_variables', {}) or {}
 
     if payload.get('schema') in {
@@ -2919,6 +3204,7 @@ def import_session_payload(
         'pybehaviorlog-0.8-session',
         'pybehaviorlog-0.8.3-session',
         'pybehaviorlog-0.9-session',
+        'pybehaviorlog-0.9.1-session',
         'cowlog-results-v1',
         'boris-tabular-csv-v1',
         'boris-tabular-tsv-v1',
@@ -2926,11 +3212,17 @@ def import_session_payload(
     }:
         event_items = payload.get('events', [])
         annotation_items = payload.get('annotations', [])
-    elif payload.get('schema') in {
-        'boris-observation-v1',
-        'boris-observation-v2',
-        'boris-observation-v3',
-    } or payload.get('observations') or payload.get('events'):
+        segment_items = payload.get('segments', [])
+    elif (
+        payload.get('schema')
+        in {
+            'boris-observation-v1',
+            'boris-observation-v2',
+            'boris-observation-v3',
+        }
+        or payload.get('observations')
+        or payload.get('events')
+    ):
         observations = payload.get('observations', [])
         if isinstance(observations, dict):
             observations = list(observations.values())
@@ -2938,11 +3230,13 @@ def import_session_payload(
             first = observations[0]
             event_items = first.get('events', [])
             annotation_items = first.get('annotations', [])
+            segment_items = first.get('segments', [])
             if isinstance(first.get('variables'), dict):
                 variable_items = first.get('variables')
         else:
             event_items = payload.get('events', [])
             annotation_items = payload.get('annotations', [])
+            segment_items = payload.get('segments', [])
     else:
         raise ValueError(_('Unsupported session payload format.'))
 
@@ -2960,7 +3254,8 @@ def import_session_payload(
             behavior=behavior,
             event_kind=resolve_event_kind(session, behavior, explicit_kind),
             timestamp_seconds=_decimal(
-                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))), default='0'
+                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))),
+                default='0',
             ),
             frame_index=item.get('frame_index') or item.get('frame') or None,
             comment=(item.get('comment') or item.get('note') or item.get('remarks') or '').strip(),
@@ -2980,7 +3275,10 @@ def import_session_payload(
         event_count += 1
 
     if not isinstance(variable_items, dict):
-        variable_items = {item.get('label') or item.get('name'): item.get('value') for item in _coerce_named_items(variable_items, label_mode=True)}
+        variable_items = {
+            item.get('label') or item.get('name'): item.get('value')
+            for item in _coerce_named_items(variable_items, label_mode=True)
+        }
     for label, value in variable_items.items():
         definition = variable_map.get(label)
         if definition is None:
@@ -3006,7 +3304,8 @@ def import_session_payload(
         SessionAnnotation.objects.create(
             session=session,
             timestamp_seconds=_decimal(
-                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))), default='0'
+                item.get('timestamp_seconds', item.get('time', item.get('timestamp'))),
+                default='0',
             ),
             title=(item.get('title') or 'Note').strip()[:120] or 'Note',
             note=(item.get('note') or item.get('comment') or item.get('text') or '').strip(),
@@ -3014,19 +3313,48 @@ def import_session_payload(
             created_by=session.observer,
         )
         annotation_count += 1
-    return event_count, annotation_count
 
+    member_lookup = {
+        membership.user.username: membership.user
+        for membership in session.project.memberships.select_related('user')
+    }
+    if session.project.owner_id:
+        member_lookup.setdefault(session.project.owner.username, session.project.owner)
+    for raw_item in segment_items:
+        item = dict(raw_item) if isinstance(raw_item, dict) else {}
+        status = (
+            item.get('status') or ObservationSegment.STATUS_TODO
+        ).strip() or ObservationSegment.STATUS_TODO
+        if status not in {choice[0] for choice in ObservationSegment.STATUS_CHOICES}:
+            status = ObservationSegment.STATUS_TODO
+        ObservationSegment.objects.create(
+            session=session,
+            title=(item.get('title') or _('Imported segment')).strip()[:160]
+            or _('Imported segment'),
+            start_seconds=_decimal(item.get('start_seconds', item.get('start', 0)), default='0'),
+            end_seconds=_decimal(
+                item.get('end_seconds', item.get('end', item.get('start_seconds', 0))), default='0'
+            ),
+            status=status,
+            assignee=member_lookup.get((item.get('assignee') or '').strip()),
+            reviewer=member_lookup.get((item.get('reviewer') or '').strip()),
+            notes=(item.get('notes') or item.get('note') or '').strip(),
+        )
+
+    return event_count, annotation_count
 
 
 @require_GET
 def healthcheck(request):
     metadata = build_release_metadata()
-    return JsonResponse({
-        'status': 'ok',
-        'service': metadata['application'],
-        'version': metadata['version'],
-        'time': timezone.now().isoformat(),
-    })
+    return JsonResponse(
+        {
+            'status': 'ok',
+            'service': metadata['application'],
+            'version': metadata['version'],
+            'time': timezone.now().isoformat(),
+        }
+    )
 
 
 @require_GET
@@ -3128,7 +3456,15 @@ def home(request):  # pragma: no cover
     )
     for project in projects:
         project.current_role = project.role_for_user(request.user)
-    return render(request, 'tracker/home.html', {'projects': projects, 'release': build_release_metadata()})
+    return render(
+        request,
+        'tracker/home.html',
+        {
+            'projects': projects,
+            'release': build_release_metadata(),
+            'review_queue': build_review_queue(request.user),
+        },
+    )
 
 
 @login_required
@@ -3206,8 +3542,14 @@ def project_detail(request, pk: int):  # pragma: no cover
             'can_review_project': project.can_review(request.user),
             'can_manage_members': project.can_manage_members(request.user),
             'analytics': analytics,
-            'memberships': project.memberships.select_related('user').order_by('role', 'user__username'),
+            'memberships': project.memberships.select_related('user').order_by(
+                'role', 'user__username'
+            ),
             'keyboard_profiles': project.keyboard_profiles.order_by('name'),
+            'open_segments': ObservationSegment.objects.filter(session__project=project)
+            .exclude(status=ObservationSegment.STATUS_DONE)
+            .select_related('session', 'assignee', 'reviewer')
+            .order_by('session__title', 'start_seconds')[:12],
         },
     )
 
@@ -3222,7 +3564,10 @@ def project_analytics(request, pk: int):  # pragma: no cover
     if reference_session_id and comparison_session_id:
         reference_session = get_accessible_session(request.user, int(reference_session_id))
         comparison_session = get_accessible_session(request.user, int(comparison_session_id))
-        if reference_session.project_id == project.pk and comparison_session.project_id == project.pk:
+        if (
+            reference_session.project_id == project.pk
+            and comparison_session.project_id == project.pk
+        ):
             agreement = build_agreement_analysis(reference_session, comparison_session)
     return render(
         request,
@@ -3343,7 +3688,10 @@ def project_export_xlsx(request, pk: int):  # pragma: no cover
     if reference_session_id and comparison_session_id:
         reference_session = get_accessible_session(request.user, int(reference_session_id))
         comparison_session = get_accessible_session(request.user, int(comparison_session_id))
-        if reference_session.project_id == project.pk and comparison_session.project_id == project.pk:
+        if (
+            reference_session.project_id == project.pk
+            and comparison_session.project_id == project.pk
+        ):
             agreement = build_agreement_analysis(reference_session, comparison_session)
             agreement_sheet = workbook.create_sheet('Agreement')
             agreement_sheet.append(['Reference session', reference_session.title])
@@ -3355,7 +3703,9 @@ def project_export_xlsx(request, pk: int):  # pragma: no cover
             agreement_sheet.append([])
             agreement_sheet.append(['Reference label', 'Comparison label', 'Count'])
             for row in agreement['confusion_rows']:
-                agreement_sheet.append([row['reference_label'], row['comparison_label'], row['count']])
+                agreement_sheet.append(
+                    [row['reference_label'], row['comparison_label'], row['count']]
+                )
 
     _autosize_workbook(workbook)
     response = HttpResponse(
@@ -3442,12 +3792,17 @@ def project_import_ethogram(request, pk: int):  # pragma: no cover
         else:
             messages.success(
                 request,
-                _('Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, behaviors: %(behaviors)s.') % {'categories': category_count, 'modifiers': modifier_count, 'behaviors': behavior_count},
+                _(
+                    'Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, behaviors: %(behaviors)s.'
+                )
+                % {
+                    'categories': category_count,
+                    'modifiers': modifier_count,
+                    'behaviors': behavior_count,
+                },
             )
             return redirect(project)
     return render(request, 'tracker/ethogram_import.html', {'form': form, 'project': project})
-
-
 
 
 @login_required
@@ -3514,9 +3869,13 @@ def project_membership_create(request, pk: int):  # pragma: no cover
 
 @login_required
 def project_membership_update(request, pk: int):  # pragma: no cover
-    membership = get_object_or_404(ProjectMembership.objects.select_related('project', 'user'), pk=pk)
+    membership = get_object_or_404(
+        ProjectMembership.objects.select_related('project', 'user'), pk=pk
+    )
     _require_project_owner(request.user, membership.project)
-    form = ProjectMembershipForm(request.POST or None, instance=membership, project=membership.project)
+    form = ProjectMembershipForm(
+        request.POST or None, instance=membership, project=membership.project
+    )
     form.fields['user'].disabled = True
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -3531,7 +3890,9 @@ def project_membership_update(request, pk: int):  # pragma: no cover
 
 @login_required
 def project_membership_delete(request, pk: int):  # pragma: no cover
-    membership = get_object_or_404(ProjectMembership.objects.select_related('project', 'user'), pk=pk)
+    membership = get_object_or_404(
+        ProjectMembership.objects.select_related('project', 'user'), pk=pk
+    )
     _require_project_owner(request.user, membership.project)
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
@@ -3583,7 +3944,9 @@ def keyboard_profile_update(request, pk: int):  # pragma: no cover
         profile.modifier_bindings = snapshot['modifier_bindings']
         profile.subject_bindings = snapshot['subject_bindings']
         profile.save()
-        messages.success(request, _('Keyboard profile refreshed from the current project bindings.'))
+        messages.success(
+            request, _('Keyboard profile refreshed from the current project bindings.')
+        )
         return redirect('tracker:project_update', pk=profile.project.pk)
     return render(
         request,
@@ -3736,7 +4099,9 @@ def subject_group_create(request, pk: int):  # pragma: no cover
 @login_required
 def subject_group_update(request, pk: int):  # pragma: no cover
     group = get_object_or_404(SubjectGroup.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, group.project, _('You need editor permissions to edit subject groups.'))
+    _require_project_editor(
+        request.user, group.project, _('You need editor permissions to edit subject groups.')
+    )
     form = SubjectGroupForm(request.POST or None, instance=group)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -3752,7 +4117,9 @@ def subject_group_update(request, pk: int):  # pragma: no cover
 @login_required
 def subject_group_delete(request, pk: int):  # pragma: no cover
     group = get_object_or_404(SubjectGroup.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, group.project, _('You need editor permissions to delete subject groups.'))
+    _require_project_editor(
+        request.user, group.project, _('You need editor permissions to delete subject groups.')
+    )
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = group.project
@@ -3790,7 +4157,9 @@ def subject_create(request, pk: int):  # pragma: no cover
 @login_required
 def subject_update(request, pk: int):  # pragma: no cover
     subject = get_object_or_404(Subject.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, subject.project, _('You need editor permissions to edit subjects.'))
+    _require_project_editor(
+        request.user, subject.project, _('You need editor permissions to edit subjects.')
+    )
     form = SubjectForm(request.POST or None, instance=subject, project=subject.project)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -3806,7 +4175,9 @@ def subject_update(request, pk: int):  # pragma: no cover
 @login_required
 def subject_delete(request, pk: int):  # pragma: no cover
     subject = get_object_or_404(Subject.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, subject.project, _('You need editor permissions to delete subjects.'))
+    _require_project_editor(
+        request.user, subject.project, _('You need editor permissions to delete subjects.')
+    )
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = subject.project
@@ -3843,7 +4214,11 @@ def independent_variable_update(request, pk: int):  # pragma: no cover
     definition = get_object_or_404(
         IndependentVariableDefinition.objects.select_related('project'), pk=pk
     )
-    _require_project_editor(request.user, definition.project, _('You need editor permissions to edit independent variables.'))
+    _require_project_editor(
+        request.user,
+        definition.project,
+        _('You need editor permissions to edit independent variables.'),
+    )
     form = IndependentVariableDefinitionForm(request.POST or None, instance=definition)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -3861,7 +4236,11 @@ def independent_variable_delete(request, pk: int):  # pragma: no cover
     definition = get_object_or_404(
         IndependentVariableDefinition.objects.select_related('project'), pk=pk
     )
-    _require_project_editor(request.user, definition.project, _('You need editor permissions to delete independent variables.'))
+    _require_project_editor(
+        request.user,
+        definition.project,
+        _('You need editor permissions to delete independent variables.'),
+    )
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = definition.project
@@ -3901,7 +4280,11 @@ def observation_template_create(request, pk: int):  # pragma: no cover
 @login_required
 def observation_template_update(request, pk: int):  # pragma: no cover
     template = get_object_or_404(ObservationTemplate.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, template.project, _('You need editor permissions to edit observation templates.'))
+    _require_project_editor(
+        request.user,
+        template.project,
+        _('You need editor permissions to edit observation templates.'),
+    )
     form = ObservationTemplateForm(
         request.POST or None, instance=template, project=template.project
     )
@@ -3919,7 +4302,11 @@ def observation_template_update(request, pk: int):  # pragma: no cover
 @login_required
 def observation_template_delete(request, pk: int):  # pragma: no cover
     template = get_object_or_404(ObservationTemplate.objects.select_related('project'), pk=pk)
-    _require_project_editor(request.user, template.project, _('You need editor permissions to delete observation templates.'))
+    _require_project_editor(
+        request.user,
+        template.project,
+        _('You need editor permissions to delete observation templates.'),
+    )
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = template.project
@@ -4045,7 +4432,9 @@ def session_create(request, pk: int):  # pragma: no cover
     project = get_object_or_404(
         accessible_projects_qs(request.user).prefetch_related('videos', 'keyboard_profiles'), pk=pk
     )
-    _require_project_editor(request.user, project, _('You need editor permissions to create sessions.'))
+    _require_project_editor(
+        request.user, project, _('You need editor permissions to create sessions.')
+    )
     form = ObservationSessionForm(request.POST or None, project=project)
     if request.method == 'POST' and form.is_valid():
         session = form.save(commit=False)
@@ -4067,7 +4456,9 @@ def session_create(request, pk: int):  # pragma: no cover
 @login_required
 def session_update(request, pk: int):  # pragma: no cover
     session = get_accessible_session(request.user, pk)
-    _require_project_editor(request.user, session.project, _('You need editor permissions to update sessions.'))
+    _require_project_editor(
+        request.user, session.project, _('You need editor permissions to update sessions.')
+    )
     form = ObservationSessionForm(request.POST or None, instance=session, project=session.project)
     if request.method == 'POST' and form.is_valid():
         session = form.save()
@@ -4137,7 +4528,9 @@ def session_import_json(request, pk: int):  # pragma: no cover
                 messages.warning(request, warning)
             messages.success(
                 request,
-                _('Import complete from %(format)s. Imported events: %(events)s. Imported annotations: %(annotations)s.')
+                _(
+                    'Import complete from %(format)s. Imported events: %(events)s. Imported annotations: %(annotations)s.'
+                )
                 % {
                     'format': import_report.get('detected_format', _('unknown format')),
                     'events': event_count,
@@ -4158,7 +4551,8 @@ def close_open_state_events(session: ObservationSession, actor, timestamp_second
         timestamp_seconds = _session_duration(session)
     stop_at = _decimal(timestamp_seconds, default='0')
     open_states: dict[int, bool] = {
-        behavior.id: False for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE)
+        behavior.id: False
+        for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE)
     }
     for event in session.events.select_related('behavior').order_by('timestamp_seconds', 'pk'):
         if event.behavior.mode != Behavior.MODE_STATE:
@@ -4169,7 +4563,9 @@ def close_open_state_events(session: ObservationSession, actor, timestamp_second
             open_states[event.behavior_id] = False
 
     created = 0
-    for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE).order_by('sort_order', 'name'):
+    for behavior in session.project.behaviors.filter(mode=Behavior.MODE_STATE).order_by(
+        'sort_order', 'name'
+    ):
         if not open_states.get(behavior.id):
             continue
         event = ObservationEvent.objects.create(
@@ -4190,8 +4586,6 @@ def close_open_state_events(session: ObservationSession, actor, timestamp_second
         )
         created += 1
     return created
-
-
 
 
 @login_required
@@ -4217,21 +4611,32 @@ def session_workflow_action(request, pk: int):
         return JsonResponse({'error': _('Invalid workflow action.')}, status=400)
     if action == 'submit':
         if not session.project.can_edit(request.user):
-            return JsonResponse({'error': _('You need editor permissions to submit a session for review.')}, status=403)
+            return JsonResponse(
+                {'error': _('You need editor permissions to submit a session for review.')},
+                status=403,
+            )
     elif action == 'fix_unpaired_states':
         if not session.project.can_edit(request.user):
-            return JsonResponse({'error': _('You need editor permissions to fix unpaired states.')}, status=403)
+            return JsonResponse(
+                {'error': _('You need editor permissions to fix unpaired states.')}, status=403
+            )
     else:
         if not session.project.can_review(request.user):
-            return JsonResponse({'error': _('You need reviewer permissions to change workflow status.')}, status=403)
+            return JsonResponse(
+                {'error': _('You need reviewer permissions to change workflow status.')}, status=403
+            )
     if action == 'fix_unpaired_states':
-        fixed_count = close_open_state_events(session, actor=request.user, timestamp_seconds=payload.get('timestamp_seconds'))
-        return JsonResponse({
-            'ok': True,
-            'fixed_count': fixed_count,
-            'workflow_status': session.workflow_status,
-            'review_notes': session.review_notes,
-        })
+        fixed_count = close_open_state_events(
+            session, actor=request.user, timestamp_seconds=payload.get('timestamp_seconds')
+        )
+        return JsonResponse(
+            {
+                'ok': True,
+                'fixed_count': fixed_count,
+                'workflow_status': session.workflow_status,
+                'review_notes': session.review_notes,
+            }
+        )
     if action == 'save_notes':
         session.review_notes = review_notes
         session.save(update_fields=['review_notes'])
@@ -4244,11 +4649,13 @@ def session_workflow_action(request, pk: int):
             summary='Review notes updated.',
             payload={'review_notes': review_notes},
         )
-        return JsonResponse({
-            'ok': True,
-            'workflow_status': session.workflow_status,
-            'review_notes': session.review_notes,
-        })
+        return JsonResponse(
+            {
+                'ok': True,
+                'workflow_status': session.workflow_status,
+                'review_notes': session.review_notes,
+            }
+        )
     session.workflow_status = status_map[action]
     session.review_notes = review_notes
     now = timezone.now()
@@ -4333,7 +4740,118 @@ def session_player(request, pk: int):  # pragma: no cover
                 'subjects': active_profile.subject_bindings if active_profile else {},
             },
             'media_analysis': build_media_analysis(session),
+            'segments': session.segments.select_related('assignee', 'reviewer').order_by(
+                'start_seconds', 'end_seconds'
+            ),
+            'segment_form': ObservationSegmentForm(project=session.project),
         },
+    )
+
+
+@login_required
+def review_queue(request):  # pragma: no cover
+    queue = build_review_queue(request.user)
+    filter_name = request.GET.get('filter', 'assigned')
+    rows = queue.get(filter_name, queue['assigned'] if request.user.is_authenticated else [])
+    return render(
+        request,
+        'tracker/review_queue.html',
+        {
+            'queue': queue,
+            'rows': rows,
+            'active_filter': filter_name,
+            'release': build_release_metadata(),
+        },
+    )
+
+
+@login_required
+def segment_create(request, pk: int):  # pragma: no cover
+    session = get_accessible_session(request.user, pk)
+    _require_project_reviewer(request.user, session.project)
+    form = ObservationSegmentForm(request.POST or None, project=session.project)
+    if request.method == 'POST' and form.is_valid():
+        segment = form.save(commit=False)
+        segment.session = session
+        segment.save()
+        _log_audit(
+            session,
+            actor=request.user,
+            action=ObservationAuditLog.ACTION_CREATE,
+            target_type=ObservationAuditLog.TARGET_SESSION,
+            target_id=segment.id,
+            summary=f'Created segment {segment.title}.',
+            payload={'segment_id': segment.id, 'title': segment.title},
+        )
+        messages.success(request, _('Review segment created.'))
+        return redirect(session)
+    return render(
+        request,
+        'tracker/segment_form.html',
+        {'form': form, 'session': session, 'project': session.project, 'mode': 'create'},
+    )
+
+
+@login_required
+def segment_update(request, pk: int):  # pragma: no cover
+    segment = get_object_or_404(
+        ObservationSegment.objects.select_related('session__project'), pk=pk
+    )
+    session = get_accessible_session(request.user, segment.session_id)
+    _require_project_reviewer(request.user, session.project)
+    form = ObservationSegmentForm(request.POST or None, instance=segment, project=session.project)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        _log_audit(
+            session,
+            actor=request.user,
+            action=ObservationAuditLog.ACTION_UPDATE,
+            target_type=ObservationAuditLog.TARGET_SESSION,
+            target_id=segment.id,
+            summary=f'Updated segment {segment.title}.',
+            payload={'segment_id': segment.id, 'title': segment.title},
+        )
+        messages.success(request, _('Review segment updated.'))
+        return redirect(session)
+    return render(
+        request,
+        'tracker/segment_form.html',
+        {
+            'form': form,
+            'session': session,
+            'project': session.project,
+            'mode': 'update',
+            'segment': segment,
+        },
+    )
+
+
+@login_required
+def segment_delete(request, pk: int):  # pragma: no cover
+    segment = get_object_or_404(
+        ObservationSegment.objects.select_related('session__project'), pk=pk
+    )
+    session = get_accessible_session(request.user, segment.session_id)
+    _require_project_reviewer(request.user, session.project)
+    form = DeleteConfirmForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        title = segment.title
+        segment.delete()
+        _log_audit(
+            session,
+            actor=request.user,
+            action=ObservationAuditLog.ACTION_DELETE,
+            target_type=ObservationAuditLog.TARGET_SESSION,
+            target_id=None,
+            summary=f'Deleted segment {title}.',
+            payload={'title': title},
+        )
+        messages.success(request, _('Review segment deleted.'))
+        return redirect(session)
+    return render(
+        request,
+        'tracker/delete_confirm.html',
+        {'form': form, 'object_name': segment.title, 'cancel_url': session.get_absolute_url()},
     )
 
 
@@ -4347,6 +4865,10 @@ def session_events_json(request, pk: int):
         {
             'events': events,
             'annotations': [serialize_annotation(item) for item in session.annotations.all()],
+            'segments': [
+                serialize_segment(item)
+                for item in session.segments.select_related('assignee', 'reviewer').all()
+            ],
             'state_status': compute_state_status(session),
             'stats': build_statistics(session, duration_hint=duration_hint),
             'timeline_buckets': build_timeline_buckets(session, duration_hint=duration_hint),
@@ -4590,7 +5112,13 @@ def session_undo_api(request, pk: int):
         summary=f'Undo {applied_action} operation.',
         payload={'history_action': applied_action, 'direction': 'undo'},
     )
-    return JsonResponse({'ok': True, 'history_action': applied_action, 'state_status': compute_state_status(session)})
+    return JsonResponse(
+        {
+            'ok': True,
+            'history_action': applied_action,
+            'state_status': compute_state_status(session),
+        }
+    )
 
 
 @login_required
@@ -4615,14 +5143,22 @@ def session_redo_api(request, pk: int):
         summary=f'Redo {applied_action} operation.',
         payload={'history_action': applied_action, 'direction': 'redo'},
     )
-    return JsonResponse({'ok': True, 'history_action': applied_action, 'state_status': compute_state_status(session)})
+    return JsonResponse(
+        {
+            'ok': True,
+            'history_action': applied_action,
+            'state_status': compute_state_status(session),
+        }
+    )
 
 
 @login_required
 @require_POST
 def annotation_create_api(request, pk: int):
     session = get_accessible_session(request.user, pk)
-    _require_project_reviewer(request.user, session.project, _('You need reviewer permissions to create annotations.'))
+    _require_project_reviewer(
+        request.user, session.project, _('You need reviewer permissions to create annotations.')
+    )
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -4654,7 +5190,9 @@ def annotation_update_api(request, pk: int):
         SessionAnnotation.objects.select_related('session__project'), pk=pk
     )
     session = get_accessible_session(request.user, annotation.session_id)
-    _require_project_reviewer(request.user, session.project, _('You need reviewer permissions to update annotations.'))
+    _require_project_reviewer(
+        request.user, session.project, _('You need reviewer permissions to update annotations.')
+    )
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -4704,8 +5242,6 @@ def annotation_delete_api(request, pk: int):
     return JsonResponse({'ok': True})
 
 
-
-
 @login_required
 @require_GET
 def session_media_analysis_json(request, pk: int):
@@ -4743,20 +5279,21 @@ def session_export_sql(request, pk: int):  # pragma: no cover
     """Export session events as SQL INSERT statements for downstream analysis."""
     session = get_accessible_session(request.user, pk)
     lines = [
-        '-- PyBehaviorLog 0.9 SQL export',
+        '-- PyBehaviorLog 0.9.1 SQL export',
         'BEGIN;',
         'CREATE TABLE IF NOT EXISTS pybehaviorlog_event_export (project text, session text, primary_video text, synced_videos text, observer text, category text, behavior text, behavior_mode text, event_kind text, timestamp_seconds numeric(10,3), subjects text, modifiers text, comment text, created_at text);',
     ]
     for row in _event_rows(session):
         escaped = [str(value).replace("'", "''") for value in row]
         lines.append(
-            "INSERT INTO pybehaviorlog_event_export (project, session, primary_video, synced_videos, observer, category, behavior, behavior_mode, event_kind, timestamp_seconds, subjects, modifiers, comment, created_at) VALUES (" +
-            f"'{escaped[0]}', '{escaped[1]}', '{escaped[2]}', '{escaped[3]}', '{escaped[4]}', '{escaped[5]}', '{escaped[6]}', '{escaped[7]}', '{escaped[8]}', {escaped[9]}, '{escaped[10]}', '{escaped[11]}', '{escaped[12]}', '{escaped[13]}');"
+            'INSERT INTO pybehaviorlog_event_export (project, session, primary_video, synced_videos, observer, category, behavior, behavior_mode, event_kind, timestamp_seconds, subjects, modifiers, comment, created_at) VALUES ('
+            + f"'{escaped[0]}', '{escaped[1]}', '{escaped[2]}', '{escaped[3]}', '{escaped[4]}', '{escaped[5]}', '{escaped[6]}', '{escaped[7]}', '{escaped[8]}', {escaped[9]}, '{escaped[10]}', '{escaped[11]}', '{escaped[12]}', '{escaped[13]}');"
         )
     lines.append('COMMIT;')
     response = HttpResponse('\n'.join(lines) + '\n', content_type='application/sql; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="session_{session.pk}_events.sql"'
     return response
+
 
 @login_required
 def session_export_compatibility_report(request, pk: int):  # pragma: no cover
@@ -4779,7 +5316,7 @@ def session_export_cowlog_txt(request, pk: int):  # pragma: no cover
     response['Content-Disposition'] = (
         f'attachment; filename="session_{session.pk}_cowlog_compatible.txt"'
     )
-    response.write('# PyBehaviorLog 0.9 CowLog-compatible export\n')
+    response.write('# PyBehaviorLog 0.9.1 CowLog-compatible export\n')
     response.write(f'# session\t{session.title}\n')
     response.write(f'# project\t{session.project.name}\n')
     response.write(f'# primary_video\t{session.primary_label}\n')
@@ -4820,9 +5357,7 @@ def session_export_behavioral_sequences(request, pk: int):  # pragma: no cover
 def session_export_textgrid(request, pk: int):  # pragma: no cover
     session = get_accessible_session(request.user, pk)
     response = HttpResponse(content_type='text/plain; charset=utf-8')
-    response['Content-Disposition'] = (
-        f'attachment; filename="session_{session.pk}.TextGrid"'
-    )
+    response['Content-Disposition'] = f'attachment; filename="session_{session.pk}.TextGrid"'
     response.write(build_textgrid_text(session))
     return response
 
@@ -4840,7 +5375,14 @@ def session_export_binary_table_tsv(request, pk: int):  # pragma: no cover
         f'attachment; filename="session_{session.pk}_binary_table.tsv"'
     )
     writer = csv.writer(response, delimiter='	')
-    writer.writerow(['time', *session.project.behaviors.order_by('sort_order', 'name').values_list('name', flat=True)])
+    writer.writerow(
+        [
+            'time',
+            *session.project.behaviors.order_by('sort_order', 'name').values_list(
+                'name', flat=True
+            ),
+        ]
+    )
     for row in rows:
         writer.writerow(row)
     return response
@@ -4901,13 +5443,19 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.9-session',
+        'schema': 'pybehaviorlog-0.9.1-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,
-        'primary_media_path': _relative_media_path(session.all_videos_ordered[0] if session.all_videos_ordered else None),
+        'primary_media_path': _relative_media_path(
+            session.all_videos_ordered[0] if session.all_videos_ordered else None
+        ),
         'synced_videos': [video.title for video in session.all_videos_ordered],
-        'media_paths': [_relative_media_path(video) for video in session.all_videos_ordered if _relative_media_path(video)],
+        'media_paths': [
+            _relative_media_path(video)
+            for video in session.all_videos_ordered
+            if _relative_media_path(video)
+        ],
         'observer': session.observer.username if session.observer else None,
         'statistics': build_statistics(session),
         'integrity_report': build_integrity_report(session),
@@ -4922,6 +5470,10 @@ def session_export_json(request, pk: int):
         'variables': {item.definition.label: item.value for item in session.variable_values.all()},
         'events': [serialize_event(event) for event in session.events.all()],
         'annotations': [serialize_annotation(item) for item in session.annotations.all()],
+        'segments': [
+            serialize_segment(item)
+            for item in session.segments.select_related('assignee', 'reviewer').all()
+        ],
     }
     response = HttpResponse(
         json.dumps(payload, indent=2, ensure_ascii=False),

@@ -65,6 +65,24 @@
             </ul>
         </article>
         <article>
+            <div class="section-headline"><h3>{% trans 'Open review segments' %}</h3></div>
+            <ul class="managed-list">
+                {% for segment in open_segments %}
+                    <li>
+                        <div>
+                            <strong><a href="{% url 'tracker:session_player' segment.session.pk %}">{{ segment.session.title }}</a></strong>
+                            <span class="muted">{{ segment.title }} · {{ segment.start_seconds }}s → {{ segment.end_seconds }}s</span>
+                            <span class="pill">{{ segment.get_status_display }}</span>
+                        </div>
+                    </li>
+                {% empty %}
+                    <li>{% trans 'No open review segments yet.' %}</li>
+                {% endfor %}
+            </ul>
+            {% if can_review_project %}<p><a href="{% url 'tracker:review_queue' %}?filter=outstanding">{% trans 'Open review queue' %}</a></p>{% endif %}
+        </article>
+
+        <article>
             <div class="section-headline"><h3>{% trans 'Keyboard profiles' %}</h3></div>
             <ul class="managed-list">
                 {% for profile in keyboard_profiles %}

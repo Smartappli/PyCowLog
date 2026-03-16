@@ -7,6 +7,7 @@ app_name = 'tracker'
 urlpatterns = [
     path('health/', views.healthcheck, name='healthcheck'),
     path('release.json', views.release_metadata_json, name='release_metadata_json'),
+    path('review-queue/', views.review_queue, name='review_queue'),
     path('', views.home, name='home'),
     path('projects/import/', views.project_import_create, name='project_import_create'),
     path('projects/new/', views.project_create, name='project_create'),
@@ -108,6 +109,7 @@ urlpatterns = [
     path('sessions/<int:pk>/edit/', views.session_update, name='session_update'),
     path('sessions/<int:pk>/delete/', views.session_delete, name='session_delete'),
     path('sessions/<int:pk>/import/json/', views.session_import_json, name='session_import_json'),
+    path('sessions/<int:pk>/segments/new/', views.segment_create, name='segment_create'),
     path(
         'sessions/<int:pk>/workflow/', views.session_workflow_action, name='session_workflow_action'
     ),
@@ -126,6 +128,8 @@ urlpatterns = [
     ),
     path('annotations/<int:pk>/update/', views.annotation_update_api, name='annotation_update_api'),
     path('annotations/<int:pk>/delete/', views.annotation_delete_api, name='annotation_delete_api'),
+    path('segments/<int:pk>/edit/', views.segment_update, name='segment_update'),
+    path('segments/<int:pk>/delete/', views.segment_delete, name='segment_delete'),
     path('sessions/<int:pk>/export/compatibility-report/', views.session_export_compatibility_report, name='session_export_compatibility_report'),
     path('sessions/<int:pk>/export/cowlog-txt/', views.session_export_cowlog_txt, name='session_export_cowlog_txt'),
     path('sessions/<int:pk>/export/html/', views.session_export_html, name='session_export_html'),
