@@ -8,6 +8,11 @@ urlpatterns = [
     path('health/', views.healthcheck, name='healthcheck'),
     path('release.json', views.release_metadata_json, name='release_metadata_json'),
     path('review-queue/', views.review_queue, name='review_queue'),
+    path(
+        'review-queue/export/segment-analytics.csv',
+        views.review_queue_export_segment_analytics_csv,
+        name='review_queue_export_segment_analytics_csv',
+    ),
     path('', views.home, name='home'),
     path('projects/import/', views.project_import_create, name='project_import_create'),
     path('projects/new/', views.project_create, name='project_create'),
@@ -110,6 +115,11 @@ urlpatterns = [
     path('sessions/<int:pk>/delete/', views.session_delete, name='session_delete'),
     path('sessions/<int:pk>/import/json/', views.session_import_json, name='session_import_json'),
     path('sessions/<int:pk>/segments/new/', views.segment_create, name='segment_create'),
+    path(
+        'sessions/<int:pk>/segments/batch-assign/',
+        views.segment_batch_assign,
+        name='segment_batch_assign',
+    ),
     path(
         'sessions/<int:pk>/workflow/', views.session_workflow_action, name='session_workflow_action'
     ),

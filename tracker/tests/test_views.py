@@ -399,6 +399,67 @@ class ViewTests(TestCase):
         segment.refresh_from_db()
         self.assertEqual(segment.status, ObservationSegment.STATUS_DONE)
 
+    def test_segment_batch_assign_and_review_queue_filters_and_export(self):
+        session = self.project.sessions.create(title='Batch session', observer=self.user, session_kind='live')
+        first = ObservationSegment.objects.create(
+            session=session,
+            title='Intro segment',
+            start_seconds='0',
+            end_seconds='5',
+            status=ObservationSegment.STATUS_TODO,
+            assignee=self.user,
+            reviewer=self.reviewer,
+        )
+        second = ObservationSegment.objects.create(
+            session=session,
+            title='Core segment',
+            start_seconds='5',
+            end_seconds='15',
+            status=ObservationSegment.STATUS_IN_PROGRESS,
+            assignee=None,
+            reviewer=self.reviewer,
+        )
+
+        reviewer_client = Client()
+        reviewer_client.login(username='reviewer', password='pass12345')
+        batch_response = reviewer_client.post(
+            reverse('tracker:segment_batch_assign', args=[session.pk]),
+            data={
+                'segment_ids': [first.pk, second.pk],
+                'set_assignee': '1',
+                'assignee': self.reviewer.pk,
+                'set_status': '1',
+                'status': ObservationSegment.STATUS_DONE,
+            },
+        )
+        self.assertEqual(batch_response.status_code, 302)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.assignee_id, self.reviewer.pk)
+        self.assertEqual(second.assignee_id, self.reviewer.pk)
+        self.assertEqual(first.status, ObservationSegment.STATUS_DONE)
+        self.assertEqual(second.status, ObservationSegment.STATUS_DONE)
+
+        queue_response = reviewer_client.get(
+            reverse('tracker:review_queue'),
+            {
+                'filter': 'all',
+                'status': 'done',
+                'assignee': 'me',
+                'q': 'Core',
+            },
+        )
+        self.assertEqual(queue_response.status_code, 200)
+        self.assertContains(queue_response, 'Core segment')
+        self.assertNotContains(queue_response, 'Intro segment')
+
+        export_response = reviewer_client.get(
+            reverse('tracker:review_queue_export_segment_analytics_csv')
+        )
+        self.assertEqual(export_response.status_code, 200)
+        self.assertEqual(export_response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('Core segment', export_response.content.decode('utf-8'))
+
     def test_session_export_json_contains_segments(self):
         session = self.project.sessions.create(title='Segment export', observer=self.user, session_kind='live')
         ObservationSegment.objects.create(

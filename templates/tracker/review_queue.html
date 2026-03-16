@@ -9,6 +9,11 @@
         <h1>{% trans 'Review queue' %}</h1>
         <p>{% trans 'Segment-level assignments for coding, checking, and reviewer handoff across projects.' %}</p>
     </div>
+    <div class="header-actions">
+        <a href="{% url 'tracker:review_queue_export_segment_analytics_csv' %}" role="button" class="secondary">
+            {% trans 'Export segment analytics (CSV)' %}
+        </a>
+    </div>
 </header>
 
 <section class="card-grid">
@@ -34,6 +39,57 @@
         <h3>{% trans 'Segments' %}</h3>
         <span class="pill">{{ active_filter }}</span>
     </div>
+    <form method="get" class="timeline-toolbar wrap-controls" style="margin-bottom: 1rem;">
+        <div>
+            <label for="filter-select">{% trans 'Queue filter' %}</label>
+            <select id="filter-select" name="filter">
+                <option value="assigned" {% if active_filter == 'assigned' %}selected{% endif %}>{% trans 'Assigned to me' %}</option>
+                <option value="review" {% if active_filter == 'review' %}selected{% endif %}>{% trans 'Waiting for my review' %}</option>
+                <option value="outstanding" {% if active_filter == 'outstanding' %}selected{% endif %}>{% trans 'Outstanding overall' %}</option>
+                <option value="all" {% if active_filter == 'all' %}selected{% endif %}>{% trans 'All segments' %}</option>
+            </select>
+        </div>
+        <div>
+            <label for="project-select">{% trans 'Project' %}</label>
+            <select id="project-select" name="project">
+                <option value="">{% trans 'All projects' %}</option>
+                {% for project in projects %}
+                    <option value="{{ project.id }}" {% if project_filter == project.id|stringformat:'s' %}selected{% endif %}>{{ project.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="status-select">{% trans 'Status' %}</label>
+            <select id="status-select" name="status">
+                <option value="">{% trans 'All statuses' %}</option>
+                <option value="open" {% if status_filter == 'open' %}selected{% endif %}>{% trans 'Open only' %}</option>
+                <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>{% trans 'To do' %}</option>
+                <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>{% trans 'In progress' %}</option>
+                <option value="done" {% if status_filter == 'done' %}selected{% endif %}>{% trans 'Done' %}</option>
+            </select>
+        </div>
+        <div>
+            <label for="assignee-select">{% trans 'Assignee' %}</label>
+            <select id="assignee-select" name="assignee">
+                <option value="">{% trans 'Any' %}</option>
+                <option value="me" {% if assignee_filter == 'me' %}selected{% endif %}>{% trans 'Assigned to me' %}</option>
+                <option value="unassigned" {% if assignee_filter == 'unassigned' %}selected{% endif %}>{% trans 'Unassigned' %}</option>
+            </select>
+        </div>
+        <div>
+            <label for="reviewer-select">{% trans 'Reviewer' %}</label>
+            <select id="reviewer-select" name="reviewer">
+                <option value="">{% trans 'Any' %}</option>
+                <option value="me" {% if reviewer_filter == 'me' %}selected{% endif %}>{% trans 'Me' %}</option>
+                <option value="unassigned" {% if reviewer_filter == 'unassigned' %}selected{% endif %}>{% trans 'Unassigned' %}</option>
+            </select>
+        </div>
+        <div>
+            <label for="search-input">{% trans 'Search' %}</label>
+            <input id="search-input" type="text" name="q" value="{{ query_filter }}" placeholder="{% trans 'Project, session, segment' %}">
+        </div>
+        <div class="align-end"><button type="submit" class="secondary">{% trans 'Apply filters' %}</button></div>
+    </form>
     <div class="table-wrapper">
         <table>
             <thead><tr><th>{% trans 'Project' %}</th><th>{% trans 'Session' %}</th><th>{% trans 'Segment' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th></tr></thead>

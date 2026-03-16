@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2
+
+- Added batch assignment for review segments directly from the session player.
+- Added finer review queue filters (project, status, assignee, reviewer, and text search).
+- Added CSV analytics export for review segments from the review queue.
+
 ## 0.9.1
 
 - Added segment-level review queues and session review segments.

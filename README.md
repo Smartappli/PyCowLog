@@ -1,8 +1,8 @@
-# PyBehaviorLog 0.9.1
+# PyBehaviorLog 0.9.2
 
 PyBehaviorLog is an ASGI-first behavioral observation platform built with Django 6.0.3. It is designed for research teams who need video-assisted coding, live observations, structured ethograms, review workflows, and exportable analytics without being locked into a desktop-only workflow.
 
-## What is in this 0.9.1 archive
+## What is in this 0.9.2 archive
 
 This version extends the earlier CowLog/BORIS-inspired foundations with:
 
@@ -125,3 +125,9 @@ This repository is marked as **AGPL-3.0-only**.
 - Added segment-level review queues and assignee/reviewer workflow.
 - Added session review segments with CRUD screens and queue dashboard.
 - Included review segments in JSON and BORIS-like session exports/imports.
+
+## New in 0.9.2
+
+- Batch assignment of review segments from the session player.
+- Finer review queue filtering by project, status, assignee/reviewer, and search text.
+- CSV export for review-segment analytics from the review queue.
