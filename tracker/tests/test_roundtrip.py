@@ -76,7 +76,7 @@ class RoundTripCertificationTests(TestCase):
         self.assertEqual(report['detected_format'], 'cowlog-results-v1')
         import_session_payload(session, imported_payload, clear_existing=True)
         exported_payload = {
-            'schema': 'pybehaviorlog-0.8.9-session',
+            'schema': 'pybehaviorlog-0.9-session',
             'events': [
                 {
                     'time': event.timestamp_seconds,

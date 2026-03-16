@@ -91,7 +91,7 @@ class ViewTests(TestCase):
 
         export_response = self.client.get(reverse('tracker:session_export_json', args=[session.pk]))
         self.assertEqual(export_response.status_code, 200)
-        self.assertIn('pybehaviorlog-0.8.9-session', export_response.content.decode('utf-8'))
+        self.assertIn('pybehaviorlog-0.9-session', export_response.content.decode('utf-8'))
 
     def test_event_update_and_delete_api(self):
         session = self.project.sessions.create(
@@ -241,7 +241,7 @@ class ViewTests(TestCase):
     def test_project_import_boris_json_view(self):
         payload = {
             'schema': 'boris-project-v3',
-            'ethogram': {'schema': 'pybehaviorlog-0.8.9-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
+            'ethogram': {'schema': 'pybehaviorlog-0.9-ethogram', 'categories': [], 'modifiers': [], 'subject_groups': [], 'subjects': [], 'variables': [], 'behaviors': [{'name': 'Imported behavior', 'description': '', 'key_binding': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': None}]},
             'subject_groups': [{'name': 'Imported group', 'description': '', 'color': '#123456', 'sort_order': 1}],
             'subjects': [{'name': 'Imported subject', 'description': '', 'key_binding': 's', 'color': '#654321', 'sort_order': 1, 'groups': ['Imported group']}],
             'variables': [{'label': 'Weight', 'description': '', 'value_type': 'numeric', 'set_values': [], 'default_value': '0', 'sort_order': 1}],
@@ -317,7 +317,7 @@ class ViewTests(TestCase):
         payload = {
             'schema': 'boris-project-v2',
             'ethogram': {
-                'schema': 'pybehaviorlog-0.8.9-ethogram',
+                'schema': 'pybehaviorlog-0.9-ethogram',
                 'categories': {'General': {'color': '#111111', 'sort_order': 1}},
                 'modifiers': {'Near': {'description': 'proximity', 'key': 'n', 'sort_order': 1}},
                 'behaviors': {'Imported code': {'description': '', 'key': 'i', 'color': '#0f766e', 'mode': 'point', 'sort_order': 1, 'category': {'name': 'General'}}},

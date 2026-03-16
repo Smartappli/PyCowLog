@@ -46,6 +46,55 @@ class ProjectSettingsForm(forms.ModelForm):
         labels = {'name': _('Name'), 'description': _('Description')}
 
 
+class ProjectImportCreateForm(forms.Form):
+    name = forms.CharField(
+        max_length=200,
+        label=_('Project name'),
+        help_text=_('Leave empty to reuse the project name found in the imported payload.'),
+        required=False,
+    )
+    description = forms.CharField(
+        required=False,
+        label=_('Description override'),
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    file = forms.FileField(
+        label=_('File'),
+        help_text=_(
+            'BORIS project JSON, PyBehaviorLog reproducibility bundle ZIP, or bundle JSON.'
+        ),
+    )
+    import_sessions = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=_('Import observation sessions'),
+    )
+    create_live_sessions = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=_('Create live sessions when media files are not available'),
+    )
+
+
+class ProjectCloneForm(forms.Form):
+    name = forms.CharField(max_length=200, label=_('Cloned project name'))
+    description = forms.CharField(
+        required=False,
+        label=_('Description'),
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    include_sessions = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=_('Clone sessions, events, annotations, and variable values'),
+    )
+    include_videos = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=_('Clone video asset metadata and links'),
+    )
+
+
 class ProjectMembershipForm(forms.ModelForm):
     class Meta:
         model = ProjectMembership
@@ -81,7 +130,7 @@ class EthogramImportForm(forms.Form):
     file = forms.FileField(
         label=_('File'),
         help_text=_(
-            'JSON export from PyBehaviorLog 0.8.x or BORIS-compatible JSON.'
+            'JSON export from PyBehaviorLog 0.9 or BORIS-compatible JSON.'
         ),
     )
     replace_existing = forms.BooleanField(
@@ -95,7 +144,7 @@ class ProjectBORISImportForm(forms.Form):
     file = forms.FileField(
         label=_('File'),
         help_text=_(
-            'BORIS project JSON or PyBehaviorLog reproducibility bundle JSON. Sessions and project entities can be merged into the current project.'
+            'BORIS project JSON or PyBehaviorLog reproducibility bundle ZIP/JSON. Sessions and project entities can be merged into the current project.'
         ),
     )
     import_sessions = forms.BooleanField(
@@ -114,7 +163,7 @@ class ProjectBORISImportForm(forms.Form):
 
 
 class SessionImportForm(forms.Form):
-    file = forms.FileField(label=_('File'), help_text=_('PyBehaviorLog 0.8.x JSON, BORIS observation JSON, or CowLog plain-text coding results.'))
+    file = forms.FileField(label=_('File'), help_text=_('PyBehaviorLog 0.9 JSON, BORIS observation JSON, spreadsheet-like session tables, or CowLog plain-text coding results.'))
     clear_existing = forms.BooleanField(
         required=False,
         label=_('Delete existing events and annotations before import'),

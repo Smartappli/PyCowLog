@@ -39,6 +39,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import json, urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)); assert data.get('status') == 'ok'\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     ports:
       - "8000:8000"
 

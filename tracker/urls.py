@@ -5,10 +5,14 @@ from . import views
 app_name = 'tracker'
 
 urlpatterns = [
+    path('health/', views.healthcheck, name='healthcheck'),
+    path('release.json', views.release_metadata_json, name='release_metadata_json'),
     path('', views.home, name='home'),
+    path('projects/import/', views.project_import_create, name='project_import_create'),
     path('projects/new/', views.project_create, name='project_create'),
     path('projects/<int:pk>/', views.project_detail, name='project_detail'),
     path('projects/<int:pk>/settings/', views.project_update, name='project_update'),
+    path('projects/<int:pk>/clone/', views.project_clone, name='project_clone'),
     path('projects/<int:pk>/analytics/', views.project_analytics, name='project_analytics'),
     path(
         'projects/<int:pk>/analytics/xlsx/', views.project_export_xlsx, name='project_export_xlsx'

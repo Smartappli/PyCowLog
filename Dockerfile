@@ -20,5 +20,7 @@ RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD python -c "import json, urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)); assert data.get('status') == 'ok'"
+
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["granian", "--interface", "asgi", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--blocking-threads", "4", "config.asgi:application"]

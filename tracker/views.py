@@ -38,7 +38,9 @@ from .forms import (
     ObservationSessionForm,
     ObservationTemplateForm,
     ProjectBORISImportForm,
+    ProjectCloneForm,
     ProjectForm,
+    ProjectImportCreateForm,
     ProjectMembershipForm,
     ProjectSettingsForm,
     SessionImportForm,
@@ -120,6 +122,219 @@ def get_owned_project(user, pk: int) -> Project:
     project = get_accessible_project(user, pk)
     _require_project_owner(user, project)
     return project
+
+
+def build_release_metadata() -> dict:
+    """Return a small machine-readable release description for health and ops tooling."""
+    return {
+        'application': 'PyBehaviorLog',
+        'version': '0.9',
+        'django_target': '6.0.3',
+        'python_minimum': '3.13',
+        'asgi': True,
+        'server': 'granian',
+        'database': 'postgresql 18',
+        'cache': 'redis 8',
+        'languages': ['en', 'ar', 'zh-hans', 'es', 'fr', 'ru'],
+    }
+
+
+
+def clone_project(
+    source: Project,
+    *,
+    owner,
+    name: str,
+    description: str = '',
+    include_sessions: bool = True,
+    include_videos: bool = True,
+) -> Project:
+    """Clone a project and its coding resources into a new owner-owned project."""
+    with transaction.atomic():
+        cloned = Project.objects.create(owner=owner, name=name, description=description)
+        ProjectMembership.objects.update_or_create(
+            project=cloned,
+            user=owner,
+            defaults={'role': ProjectMembership.ROLE_OWNER},
+        )
+
+        category_map = {}
+        for category in source.categories.order_by('sort_order', 'name'):
+            category_map[category.pk] = BehaviorCategory.objects.create(
+                project=cloned,
+                name=category.name,
+                color=category.color,
+                sort_order=category.sort_order,
+            )
+
+        modifier_map = {}
+        for modifier in source.modifiers.order_by('sort_order', 'name'):
+            modifier_map[modifier.pk] = Modifier.objects.create(
+                project=cloned,
+                name=modifier.name,
+                description=modifier.description,
+                key_binding=modifier.key_binding,
+                sort_order=modifier.sort_order,
+            )
+
+        group_map = {}
+        for group in source.subject_groups.order_by('sort_order', 'name'):
+            group_map[group.pk] = SubjectGroup.objects.create(
+                project=cloned,
+                name=group.name,
+                description=group.description,
+                color=group.color,
+                sort_order=group.sort_order,
+            )
+
+        subject_map = {}
+        for subject in source.subjects.order_by('sort_order', 'name').prefetch_related('groups'):
+            new_subject = Subject.objects.create(
+                project=cloned,
+                name=subject.name,
+                description=subject.description,
+                key_binding=subject.key_binding,
+                color=subject.color,
+                sort_order=subject.sort_order,
+            )
+            new_subject.groups.set([group_map[group.pk] for group in subject.groups.all() if group.pk in group_map])
+            subject_map[subject.pk] = new_subject
+
+        variable_map = {}
+        for variable in source.variable_definitions.order_by('sort_order', 'label'):
+            variable_map[variable.pk] = IndependentVariableDefinition.objects.create(
+                project=cloned,
+                label=variable.label,
+                description=variable.description,
+                value_type=variable.value_type,
+                set_values=variable.set_values,
+                default_value=variable.default_value,
+                sort_order=variable.sort_order,
+            )
+
+        behavior_map = {}
+        for behavior in source.behaviors.order_by('sort_order', 'name').select_related('category'):
+            behavior_map[behavior.pk] = Behavior.objects.create(
+                project=cloned,
+                category=category_map.get(behavior.category_id),
+                name=behavior.name,
+                description=behavior.description,
+                key_binding=behavior.key_binding,
+                color=behavior.color,
+                mode=behavior.mode,
+                sort_order=behavior.sort_order,
+            )
+
+        for template in source.observation_templates.order_by('name').prefetch_related('behaviors', 'modifiers', 'subjects', 'variable_definitions'):
+            new_template = ObservationTemplate.objects.create(
+                project=cloned,
+                name=template.name,
+                description=template.description,
+                default_session_kind=template.default_session_kind,
+            )
+            new_template.behaviors.set([behavior_map[item.pk] for item in template.behaviors.all() if item.pk in behavior_map])
+            new_template.modifiers.set([modifier_map[item.pk] for item in template.modifiers.all() if item.pk in modifier_map])
+            new_template.subjects.set([subject_map[item.pk] for item in template.subjects.all() if item.pk in subject_map])
+            new_template.variable_definitions.set([variable_map[item.pk] for item in template.variable_definitions.all() if item.pk in variable_map])
+
+        profile_map = {}
+        for profile in source.keyboard_profiles.order_by('name'):
+            profile_map[profile.pk] = KeyboardProfile.objects.create(
+                project=cloned,
+                name=profile.name,
+                description=profile.description,
+                is_default=profile.is_default,
+                behavior_bindings=profile.behavior_bindings,
+                modifier_bindings=profile.modifier_bindings,
+                subject_bindings=profile.subject_bindings,
+            )
+
+        video_map = {}
+        if include_videos:
+            for video in source.videos.order_by('title'):
+                new_video = VideoAsset.objects.create(
+                    project=cloned,
+                    title=video.title,
+                    file=video.file.name,
+                    notes=video.notes,
+                )
+                video_map[video.pk] = new_video
+
+        if include_sessions:
+            template_map = {item.name: item for item in cloned.observation_templates.all()}
+            session_video_links = []
+            annotation_rows = []
+            m2m_event_modifiers = []
+            m2m_event_subjects = []
+            for session in source.sessions.order_by('created_at').select_related('video', 'template', 'keyboard_profile', 'observer').prefetch_related('events__modifiers', 'events__subjects', 'annotations', 'video_links__video', 'variable_values__definition'):
+                new_session = ObservationSession.objects.create(
+                    project=cloned,
+                    video=video_map.get(session.video_id),
+                    template=template_map.get(session.template.name) if session.template_id else None,
+                    keyboard_profile=profile_map.get(session.keyboard_profile_id),
+                    session_kind=session.session_kind,
+                    workflow_status=session.workflow_status,
+                    title=session.title,
+                    description=session.description,
+                    observer=owner,
+                    notes=session.notes,
+                    review_notes=session.review_notes,
+                    reviewed_by=None,
+                    reviewed_at=session.reviewed_at,
+                    locked_at=session.locked_at,
+                    playback_rate=session.playback_rate,
+                    frame_step_seconds=session.frame_step_seconds,
+                    recorded_at=session.recorded_at,
+                )
+                for value in session.variable_values.all():
+                    if value.definition_id in variable_map:
+                        ObservationVariableValue.objects.create(
+                            session=new_session,
+                            definition=variable_map[value.definition_id],
+                            value=value.value,
+                        )
+                for link in session.video_links.all():
+                    if link.video_id in video_map:
+                        session_video_links.append(SessionVideoLink(
+                            session=new_session,
+                            video=video_map[link.video_id],
+                            sort_order=link.sort_order,
+                        ))
+                event_map = {}
+                for event in session.events.all():
+                    new_event = ObservationEvent.objects.create(
+                        session=new_session,
+                        subject=subject_map.get(event.subject_id),
+                        behavior=behavior_map[event.behavior_id],
+                        event_kind=event.event_kind,
+                        timestamp_seconds=event.timestamp_seconds,
+                        frame_index=event.frame_index,
+                        comment=event.comment,
+                    )
+                    event_map[event.pk] = new_event
+                    m2m_event_modifiers.append((new_event, [modifier_map[item.pk] for item in event.modifiers.all() if item.pk in modifier_map]))
+                    m2m_event_subjects.append((new_event, [subject_map[item.pk] for item in event.subjects.all() if item.pk in subject_map]))
+                for annotation in session.annotations.all():
+                    annotation_rows.append(SessionAnnotation(
+                        session=new_session,
+                        timestamp_seconds=annotation.timestamp_seconds,
+                        title=annotation.title,
+                        note=annotation.note,
+                        color=annotation.color,
+                        created_by=owner,
+                    ))
+            if session_video_links:
+                SessionVideoLink.objects.bulk_create(session_video_links)
+            if annotation_rows:
+                SessionAnnotation.objects.bulk_create(annotation_rows)
+            for event, modifiers in m2m_event_modifiers:
+                if modifiers:
+                    event.modifiers.set(modifiers)
+            for event, subjects in m2m_event_subjects:
+                if subjects:
+                    event.subjects.set(subjects)
+
+        return cloned
 
 
 def accessible_sessions_qs(user):
@@ -1306,8 +1521,8 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         })
 
     manifest = {
-        'schema': 'pybehaviorlog-0.8.9-bundle',
-        'version': '0.8.9',
+        'schema': 'pybehaviorlog-0.9-bundle',
+        'version': '0.9',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1861,8 +2076,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
     modifier_event_count = sum(1 for event in ordered_events if event.modifiers.exists())
     multi_subject_event_count = sum(1 for event in ordered_events if event.subjects.count() > 1)
     report = {
-        'schema': 'pybehaviorlog-0.8.9-session-compatibility-report',
-        'version': '0.8.9',
+        'schema': 'pybehaviorlog-0.9-session-compatibility-report',
+        'version': '0.9',
         'session': session.title,
         'boris': {
             'documented_exports': [
@@ -1897,7 +2112,7 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
         'certification': {
             'roundtrip_tested_families': ['boris_observation_json', 'cowlog_plain_text_results'],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.8.9',
+            'fixture_version': '0.9',
         },
     }
     if state_event_count:
@@ -1915,8 +2130,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
 def build_project_compatibility_report(project: Project) -> dict:
     """Summarize project-level exchange coverage for BORIS and CowLog."""
     return {
-        'schema': 'pybehaviorlog-0.8.9-project-compatibility-report',
-        'version': '0.8.9',
+        'schema': 'pybehaviorlog-0.9-project-compatibility-report',
+        'version': '0.9',
         'project': project.name,
         'counts': {
             'sessions': project.sessions.count(),
@@ -1947,7 +2162,7 @@ def build_project_compatibility_report(project: Project) -> dict:
         'certification': {
             'roundtrip_tested_families': ['boris_project_json', 'boris_observation_json', 'cowlog_plain_text_results'],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.8.9',
+            'fixture_version': '0.9',
         },
         'sample_session_reports': [
             build_session_compatibility_report(session)
@@ -2124,7 +2339,7 @@ def import_project_payload(
         'boris-project-v2',
         'boris-project-v3',
         'pybehaviorlog-0.8.3-bundle',
-        'pybehaviorlog-0.8.9-bundle',
+        'pybehaviorlog-0.9-bundle',
     }:
         raise ValueError(_('Unsupported project payload format.'))
 
@@ -2133,7 +2348,7 @@ def import_project_payload(
         project,
         {
             **ethogram_payload,
-            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.9-ethogram'),
+            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.9-ethogram'),
         },
         replace_existing=False,
     )
@@ -2335,7 +2550,7 @@ def import_project_payload(
 
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.8.9-ethogram',
+        'schema': 'pybehaviorlog-0.9-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -2416,7 +2631,7 @@ def import_ethogram_payload(
         'cowlog-django-v5-ethogram',
         'pybehaviorlog-0.8-ethogram',
         'pybehaviorlog-0.8.3-ethogram',
-        'pybehaviorlog-0.8.9-ethogram',
+        'pybehaviorlog-0.9-ethogram',
         'boris-project-v1',
         'boris-project-v2',
         'boris-project-v3',
@@ -2703,7 +2918,7 @@ def import_session_payload(
         'pybehaviorlog-v6-session',
         'pybehaviorlog-0.8-session',
         'pybehaviorlog-0.8.3-session',
-        'pybehaviorlog-0.8.9-session',
+        'pybehaviorlog-0.9-session',
         'cowlog-results-v1',
         'boris-tabular-csv-v1',
         'boris-tabular-tsv-v1',
@@ -2803,6 +3018,101 @@ def import_session_payload(
 
 
 
+@require_GET
+def healthcheck(request):
+    metadata = build_release_metadata()
+    return JsonResponse({
+        'status': 'ok',
+        'service': metadata['application'],
+        'version': metadata['version'],
+        'time': timezone.now().isoformat(),
+    })
+
+
+@require_GET
+def release_metadata_json(request):
+    return JsonResponse(build_release_metadata())
+
+
+@login_required
+def project_import_create(request):  # pragma: no cover
+    form = ProjectImportCreateForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        uploaded = form.cleaned_data['file']
+        import_sessions = form.cleaned_data['import_sessions']
+        create_live_sessions = form.cleaned_data['create_live_sessions']
+        try:
+            payload, bundled_sessions = load_project_import_payload(uploaded)
+            inferred_name = (
+                (payload.get('project') or {}).get('name')
+                or payload.get('name')
+                or _('Imported project')
+            )
+            inferred_description = (
+                (payload.get('project') or {}).get('description')
+                or payload.get('description')
+                or ''
+            )
+            project_name = (form.cleaned_data['name'] or inferred_name).strip()[:200] or _(
+                'Imported project'
+            )
+            project_description = (form.cleaned_data['description'] or inferred_description).strip()
+            if Project.objects.filter(owner=request.user, name=project_name).exists():
+                form.add_error('name', _('You already have a project with this name.'))
+            else:
+                with transaction.atomic():
+                    project = Project.objects.create(
+                        owner=request.user,
+                        name=project_name,
+                        description=project_description,
+                    )
+                    ProjectMembership.objects.update_or_create(
+                        project=project,
+                        user=request.user,
+                        defaults={'role': ProjectMembership.ROLE_OWNER},
+                    )
+                    import_project_payload(
+                        project,
+                        payload,
+                        actor=request.user,
+                        import_sessions=import_sessions,
+                        create_live_sessions=create_live_sessions,
+                        bundled_sessions=bundled_sessions,
+                    )
+                messages.success(request, _('Project created from import package.'))
+                return redirect(project)
+        except (json.JSONDecodeError, ValueError) as exc:
+            messages.error(request, str(exc))
+    return render(request, 'tracker/project_import_create.html', {'form': form})
+
+
+@login_required
+def project_clone(request, pk: int):  # pragma: no cover
+    source = get_owned_project(request.user, pk)
+    initial = {
+        'name': _('%(name)s copy') % {'name': source.name},
+        'description': source.description,
+        'include_sessions': True,
+        'include_videos': True,
+    }
+    form = ProjectCloneForm(request.POST or None, initial=initial)
+    if request.method == 'POST' and form.is_valid():
+        if Project.objects.filter(owner=request.user, name=form.cleaned_data['name']).exists():
+            form.add_error('name', _('You already have a project with this name.'))
+        else:
+            cloned = clone_project(
+                source,
+                owner=request.user,
+                name=form.cleaned_data['name'],
+                description=form.cleaned_data['description'],
+                include_sessions=form.cleaned_data['include_sessions'],
+                include_videos=form.cleaned_data['include_videos'],
+            )
+            messages.success(request, _('Project cloned successfully.'))
+            return redirect(cloned)
+    return render(request, 'tracker/project_clone_form.html', {'form': form, 'project': source})
+
+
 @login_required
 def home(request):  # pragma: no cover
     projects = list(
@@ -2818,7 +3128,7 @@ def home(request):  # pragma: no cover
     )
     for project in projects:
         project.current_role = project.role_for_user(request.user)
-    return render(request, 'tracker/home.html', {'projects': projects})
+    return render(request, 'tracker/home.html', {'projects': projects, 'release': build_release_metadata()})
 
 
 @login_required
@@ -4433,7 +4743,7 @@ def session_export_sql(request, pk: int):  # pragma: no cover
     """Export session events as SQL INSERT statements for downstream analysis."""
     session = get_accessible_session(request.user, pk)
     lines = [
-        '-- PyBehaviorLog 0.8.9 SQL export',
+        '-- PyBehaviorLog 0.9 SQL export',
         'BEGIN;',
         'CREATE TABLE IF NOT EXISTS pybehaviorlog_event_export (project text, session text, primary_video text, synced_videos text, observer text, category text, behavior text, behavior_mode text, event_kind text, timestamp_seconds numeric(10,3), subjects text, modifiers text, comment text, created_at text);',
     ]
@@ -4469,7 +4779,7 @@ def session_export_cowlog_txt(request, pk: int):  # pragma: no cover
     response['Content-Disposition'] = (
         f'attachment; filename="session_{session.pk}_cowlog_compatible.txt"'
     )
-    response.write('# PyBehaviorLog 0.8.9 CowLog-compatible export\n')
+    response.write('# PyBehaviorLog 0.9 CowLog-compatible export\n')
     response.write(f'# session\t{session.title}\n')
     response.write(f'# project\t{session.project.name}\n')
     response.write(f'# primary_video\t{session.primary_label}\n')
@@ -4591,7 +4901,7 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.8.9-session',
+        'schema': 'pybehaviorlog-0.9-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,

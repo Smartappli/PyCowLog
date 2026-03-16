@@ -1,8 +1,8 @@
-# PyBehaviorLog 0.8.9
+# PyBehaviorLog 0.9
 
 PyBehaviorLog is an ASGI-first behavioral observation platform built with Django 6.0.3. It is designed for research teams who need video-assisted coding, live observations, structured ethograms, review workflows, and exportable analytics without being locked into a desktop-only workflow.
 
-## What is in this 0.8.9 archive
+## What is in this 0.9 archive
 
 This version extends the earlier CowLog/BORIS-inspired foundations with:
 
@@ -110,3 +110,11 @@ Additional English documentation is available in:
 ## License
 
 This repository is marked as **AGPL-3.0-only**.
+
+
+## New in 0.9
+
+- Import a BORIS project or PyBehaviorLog bundle directly as a **new project**.
+- Clone an existing project, with optional sessions and video asset metadata.
+- Operational endpoints: `/health/` and `/release.json`.
+- Management commands: `export_project_bundle` and `release_report`.
