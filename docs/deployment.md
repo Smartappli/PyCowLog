@@ -56,3 +56,12 @@ coverage run manage.py test
 coverage report --fail-under=80
 pre-commit run --all-files
 ```
+
+
+## Local ASGI run
+
+Use Granian directly to mirror production ASGI behavior:
+
+```bash
+granian --interface asgi --host 127.0.0.1 --port 8000 config.asgi:application
+```

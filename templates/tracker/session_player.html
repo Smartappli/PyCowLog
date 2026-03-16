@@ -235,12 +235,48 @@
                 <h3>{% trans 'Review segments' %}</h3>
                 {% if can_review_session %}<a href="{% url 'tracker:segment_create' session.pk %}" class="secondary" role="button">{% trans 'New segment' %}</a>{% endif %}
             </div>
+            {% if can_review_session %}
+            <form method="post" action="{% url 'tracker:segment_batch_assign' session.pk %}" class="integrity-box compact-box" style="margin-bottom: 1rem;">
+                {% csrf_token %}
+                <div class="timeline-toolbar wrap-controls">
+                    <div>
+                        <label for="batch-assignee">{% trans 'Assignee' %}</label>
+                        <select id="batch-assignee" name="assignee">
+                            <option value="">{% trans 'Unassigned' %}</option>
+                            {% for user in segment_form.fields.assignee.queryset %}
+                                <option value="{{ user.pk }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <label><input type="checkbox" name="set_assignee" value="1"> {% trans 'Apply assignee' %}</label>
+                    </div>
+                    <div>
+                        <label for="batch-reviewer">{% trans 'Reviewer' %}</label>
+                        <select id="batch-reviewer" name="reviewer">
+                            <option value="">{% trans 'Unassigned' %}</option>
+                            {% for user in segment_form.fields.reviewer.queryset %}
+                                <option value="{{ user.pk }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <label><input type="checkbox" name="set_reviewer" value="1"> {% trans 'Apply reviewer' %}</label>
+                    </div>
+                    <div>
+                        <label for="batch-status">{% trans 'Status' %}</label>
+                        <select id="batch-status" name="status">
+                            {% for value, label in segment_form.fields.status.choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <label><input type="checkbox" name="set_status" value="1"> {% trans 'Apply status' %}</label>
+                    </div>
+                    <div class="align-end"><button type="submit" class="secondary">{% trans 'Batch assign selected segments' %}</button></div>
+                </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table>
-                    <thead><tr><th>{% trans 'Title' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
+                    <thead><tr>{% if can_review_session %}<th>{% trans 'Select' %}</th>{% endif %}<th>{% trans 'Title' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
                     <tbody>
                     {% for segment in segments %}
                         <tr>
+                            {% if can_review_session %}<td><input type="checkbox" name="segment_ids" value="{{ segment.pk }}"></td>{% endif %}
                             <td>{{ segment.title }}</td>
                             <td>{{ segment.start_seconds }}s → {{ segment.end_seconds }}s</td>
                             <td>{{ segment.get_status_display }}</td>
@@ -254,11 +290,33 @@
                             </td>
                         </tr>
                     {% empty %}
+                        <tr><td colspan="{% if can_review_session %}7{% else %}6{% endif %}">{% trans 'No review segments defined yet.' %}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            </form>
+            {% else %}
+            <div class="table-wrapper compact-table-wrapper">
+                <table>
+                    <thead><tr><th>{% trans 'Title' %}</th><th>{% trans 'Range' %}</th><th>{% trans 'Status' %}</th><th>{% trans 'Assignee' %}</th><th>{% trans 'Reviewer' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
+                    <tbody>
+                    {% for segment in segments %}
+                        <tr>
+                            <td>{{ segment.title }}</td>
+                            <td>{{ segment.start_seconds }}s → {{ segment.end_seconds }}s</td>
+                            <td>{{ segment.get_status_display }}</td>
+                            <td>{{ segment.assignee.username|default:'—' }}</td>
+                            <td>{{ segment.reviewer.username|default:'—' }}</td>
+                            <td>—</td>
+                        </tr>
+                    {% empty %}
                         <tr><td colspan="6">{% trans 'No review segments defined yet.' %}</td></tr>
                     {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% endif %}
         </article>
 
         <article>
