@@ -4809,19 +4809,40 @@ def review_queue(request):  # pragma: no cover
     status_filter = request.GET.get('status', '').strip()
     assignee_filter = request.GET.get('assignee', '').strip()
     reviewer_filter = request.GET.get('reviewer', '').strip()
-    query_filter = request.GET.get('q', '').strip()
+    query_filter = request.GET.get('q', '').strip().lower()
 
-    rows = _filter_review_segments(
-        rows,
-        user=request.user,
-        project_filter=project_filter,
-        status_filter=status_filter,
-        assignee_filter=assignee_filter,
-        reviewer_filter=reviewer_filter,
-        query_filter=query_filter,
-    )
+    if project_filter.isdigit():
+        rows = [item for item in rows if item.session.project_id == int(project_filter)]
 
-    projects = _review_queue_project_choices(queue['all'])
+    if status_filter == 'open':
+        rows = [item for item in rows if item.status != ObservationSegment.STATUS_DONE]
+    elif status_filter in {
+        ObservationSegment.STATUS_TODO,
+        ObservationSegment.STATUS_IN_PROGRESS,
+        ObservationSegment.STATUS_DONE,
+    }:
+        rows = [item for item in rows if item.status == status_filter]
+
+    if assignee_filter == 'me':
+        rows = [item for item in rows if item.assignee_id == request.user.id]
+    elif assignee_filter == 'unassigned':
+        rows = [item for item in rows if item.assignee_id is None]
+
+    if reviewer_filter == 'me':
+        rows = [item for item in rows if item.reviewer_id == request.user.id]
+    elif reviewer_filter == 'unassigned':
+        rows = [item for item in rows if item.reviewer_id is None]
+
+    if query_filter:
+        rows = [
+            item
+            for item in rows
+            if query_filter in item.title.lower()
+            or query_filter in item.session.title.lower()
+            or query_filter in item.session.project.name.lower()
+        ]
+
+    projects = sorted({item.session.project for item in queue['all']}, key=lambda project: project.name.lower())
     return render(
         request,
         'tracker/review_queue.html',
@@ -4843,22 +4864,11 @@ def review_queue(request):  # pragma: no cover
 @login_required
 @require_GET
 def review_queue_export_segment_analytics_csv(request):
-    queue = build_review_queue(request.user)
-    filter_name = request.GET.get('filter', 'all').strip() or 'all'
-    project_filter = request.GET.get('project', '').strip()
-    status_filter = request.GET.get('status', '').strip()
-    assignee_filter = request.GET.get('assignee', '').strip()
-    reviewer_filter = request.GET.get('reviewer', '').strip()
-    query_filter = request.GET.get('q', '').strip()
-    rows = list(queue.get(filter_name, queue['all']))
-    segments = _filter_review_segments(
-        rows,
-        user=request.user,
-        project_filter=project_filter,
-        status_filter=status_filter,
-        assignee_filter=assignee_filter,
-        reviewer_filter=reviewer_filter,
-        query_filter=query_filter,
+    projects = accessible_projects_qs(request.user)
+    segments = (
+        ObservationSegment.objects.filter(session__project__in=projects)
+        .select_related('session', 'session__project', 'assignee', 'reviewer')
+        .order_by('session__project__name', 'session__title', 'start_seconds', 'pk')
     )
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="review_segment_analytics.csv"'

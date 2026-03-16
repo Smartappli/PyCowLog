@@ -10,7 +10,7 @@
         <p>{% trans 'Segment-level assignments for coding, checking, and reviewer handoff across projects.' %}</p>
     </div>
     <div class="header-actions">
-        <a href="{% url 'tracker:review_queue_export_segment_analytics_csv' %}?filter={{ active_filter }}&project={{ project_filter|urlencode }}&status={{ status_filter|urlencode }}&assignee={{ assignee_filter|urlencode }}&reviewer={{ reviewer_filter|urlencode }}&q={{ query_filter|urlencode }}" role="button" class="secondary">
+        <a href="{% url 'tracker:review_queue_export_segment_analytics_csv' %}" role="button" class="secondary">
             {% trans 'Export segment analytics (CSV)' %}
         </a>
     </div>
