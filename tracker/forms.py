@@ -7,11 +7,13 @@ from .models import (
     Behavior,
     BehaviorCategory,
     IndependentVariableDefinition,
+    KeyboardProfile,
     Modifier,
     ObservationSession,
     ObservationTemplate,
     ObservationVariableValue,
     Project,
+    ProjectMembership,
     Subject,
     SubjectGroup,
     VideoAsset,
@@ -37,25 +39,41 @@ class ProjectForm(forms.ModelForm):
 
 
 class ProjectSettingsForm(forms.ModelForm):
-    collaborators = forms.ModelMultipleChoiceField(
-        queryset=User.objects.none(),
-        required=False,
-        label=_('Collaborators'),
-        widget=forms.CheckboxSelectMultiple,
-    )
-
     class Meta:
         model = Project
-        fields = ['name', 'description', 'collaborators']
+        fields = ['name', 'description']
         widgets = {'description': forms.Textarea(attrs={'rows': 4})}
         labels = {'name': _('Name'), 'description': _('Description')}
 
-    def __init__(self, *args, owner=None, **kwargs):
+
+class ProjectMembershipForm(forms.ModelForm):
+    class Meta:
+        model = ProjectMembership
+        fields = ['user', 'role']
+        labels = {'user': _('User'), 'role': _('Role')}
+
+    def __init__(self, *args, project=None, **kwargs):
+        self.project = project
         super().__init__(*args, **kwargs)
         queryset = User.objects.order_by('username')
-        if owner is not None:
-            queryset = queryset.exclude(pk=owner.pk)
-        self.fields['collaborators'].queryset = queryset
+        if project is not None:
+            excluded_ids = set(project.memberships.values_list('user_id', flat=True))
+            if self.instance and self.instance.pk and self.instance.user_id:
+                excluded_ids.discard(self.instance.user_id)
+            queryset = queryset.exclude(pk=project.owner_id).exclude(pk__in=excluded_ids)
+        self.fields['user'].queryset = queryset
+
+
+class KeyboardProfileForm(forms.ModelForm):
+    class Meta:
+        model = KeyboardProfile
+        fields = ['name', 'description', 'is_default']
+        widgets = {'description': forms.Textarea(attrs={'rows': 3})}
+        labels = {
+            'name': _('Name'),
+            'description': _('Description'),
+            'is_default': _('Set as default profile'),
+        }
 
 
 class EthogramImportForm(forms.Form):
@@ -228,6 +246,7 @@ class ObservationSessionForm(forms.ModelForm):
         model = ObservationSession
         fields = [
             'template',
+            'keyboard_profile',
             'session_kind',
             'video',
             'additional_videos',
@@ -247,6 +266,7 @@ class ObservationSessionForm(forms.ModelForm):
         }
         labels = {
             'template': _('Observation template'),
+            'keyboard_profile': _('Keyboard profile'),
             'session_kind': _('Session kind'),
             'video': _('Primary video'),
             'title': _('Title'),
@@ -268,6 +288,7 @@ class ObservationSessionForm(forms.ModelForm):
             self.fields['video'].queryset = video_qs
             self.fields['additional_videos'].queryset = video_qs
             self.fields['template'].queryset = template_qs
+            self.fields['keyboard_profile'].queryset = project.keyboard_profiles.order_by('name')
             self.variable_definitions = list(
                 project.variable_definitions.order_by('sort_order', 'label')
             )
@@ -335,6 +356,10 @@ class ObservationSessionForm(forms.ModelForm):
         video = cleaned_data.get('video')
         if session_kind == ObservationSession.KIND_MEDIA and video is None:
             self.add_error('video', _('A primary video is required for a media session.'))
+        if session_kind == ObservationSession.KIND_MEDIA and not cleaned_data.get('title'):
+            self.add_error('title', _('A title is required for a media observation session.'))
+        if session_kind == ObservationSession.KIND_LIVE and not cleaned_data.get('title'):
+            self.add_error('title', _('A title is required for a live observation session.'))
         if session_kind == ObservationSession.KIND_LIVE:
             cleaned_data['video'] = None
             cleaned_data['additional_videos'] = []

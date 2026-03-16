@@ -1,3 +1,4 @@
+#
 msgid ""
 msgstr ""
 "Language: ar\n"
@@ -106,8 +107,12 @@ msgstr "تم إنشاء السلوك."
 msgid "Behavior deleted."
 msgstr "تم حذف السلوك."
 
-msgid "Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · E = quick note"
-msgstr "اختصار السلوك = ترميز فوري · Alt = START إجباري · Shift = STOP إجباري · E = ملاحظة سريعة"
+msgid ""
+"Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · "
+"E = quick note"
+msgstr ""
+"اختصار السلوك = ترميز فوري · Alt = START إجباري · Shift = STOP إجباري · E = "
+"ملاحظة سريعة"
 
 msgid "Behavior updated."
 msgstr "تم تحديث السلوك."
@@ -202,8 +207,12 @@ msgstr "إنشاء المشروع"
 msgid "Create session"
 msgstr "إنشاء الجلسة"
 
-msgid "Create your first project to start coding behavior from video or live observation sessions."
-msgstr "أنشئ مشروعك الأول لبدء ترميز السلوك من الفيديو أو من جلسات الملاحظة المباشرة."
+msgid ""
+"Create your first project to start coding behavior from video or live "
+"observation sessions."
+msgstr ""
+"أنشئ مشروعك الأول لبدء ترميز السلوك من الفيديو أو من جلسات الملاحظة "
+"المباشرة."
 
 msgid "Dashboard"
 msgstr "لوحة التحكم"
@@ -367,8 +376,12 @@ msgstr "Invalid modifier_ids or subject_ids."
 msgid "Invalid workflow action."
 msgstr "Invalid workflow action."
 
-msgid "JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-like JSON."
-msgstr "تصدير JSON من PyBehaviorLog 0.8 والإصدارات الأقدم المدعومة أو JSON على نمط BORIS."
+msgid ""
+"JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-"
+"like JSON."
+msgstr ""
+"تصدير JSON من PyBehaviorLog 0.8 والإصدارات الأقدم المدعومة أو JSON على نمط "
+"BORIS."
 
 msgid "Key binding"
 msgstr "اختصار لوحة المفاتيح"
@@ -514,8 +527,12 @@ msgstr "لا توجد معدلات متاحة."
 msgid "No modifiers yet."
 msgstr "لا توجد معدلات بعد."
 
-msgid "No primary media file is attached to this session. The timer and event coding tools remain available."
-msgstr "No primary media file is attached to this session. The timer and event coding tools remain available."
+msgid ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
+msgstr ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
 
 msgid "No projects yet"
 msgstr "لا توجد مشاريع بعد"
@@ -670,11 +687,19 @@ msgstr "إعدادات المشروع"
 msgid "Project settings updated."
 msgstr "تم تحديث إعدادات المشروع."
 
-msgid "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
-msgstr "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
+msgstr ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
 
-msgid "PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-like JSON."
-msgstr "JSON من PyBehaviorLog 0.8 والإصدارات الأقدم المدعومة أو JSON مبسط على نمط BORIS."
+msgid ""
+"PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-"
+"like JSON."
+msgstr ""
+"JSON من PyBehaviorLog 0.8 والإصدارات الأقدم المدعومة أو JSON مبسط على نمط "
+"BORIS."
 
 msgid "Quick overview"
 msgstr "نظرة سريعة"
@@ -700,8 +725,12 @@ msgstr "حفظ"
 msgid "Segments"
 msgstr "المقاطع"
 
-msgid "Select one or more subjects. Selected subjects are attached to the next coded event."
-msgstr "اختر فردًا واحدًا أو أكثر. سيتم إرفاق الأفراد المحددين بالحدث المشفّر التالي."
+msgid ""
+"Select one or more subjects. Selected subjects are attached to the next "
+"coded event."
+msgstr ""
+"اختر فردًا واحدًا أو أكثر. سيتم إرفاق الأفراد المحددين بالحدث المشفّر "
+"التالي."
 
 msgid "Session"
 msgstr "الجلسة"
@@ -784,8 +813,12 @@ msgstr "مجموعات الأفراد"
 msgid "Subject updated."
 msgstr "تم تحديث الفرد."
 
-msgid "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
-msgstr "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
+msgid ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
+msgstr ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
 
 msgid "Subjects"
 msgstr "الأفراد"
@@ -862,8 +895,13 @@ msgstr "نوع القيمة"
 msgid "Variables"
 msgstr "المتغيرات"
 
-msgid "Version 0.8 adds subject groups, observation templates, review workflow, audit trail, subject-level analytics, and richer BORIS-inspired interoperability."
-msgstr "تضيف النسخة 0.8 مجموعات الأفراد، وقوالب الملاحظة، ومسار المراجعة، وسجل التدقيق، والتحليلات على مستوى الفرد، وتوافقًا أغنى مستوحى من BORIS."
+msgid ""
+"Version 0.8 adds subject groups, observation templates, review workflow, "
+"audit trail, subject-level analytics, and richer BORIS-inspired "
+"interoperability."
+msgstr ""
+"تضيف النسخة 0.8 مجموعات الأفراد، وقوالب الملاحظة، ومسار المراجعة، وسجل "
+"التدقيق، والتحليلات على مستوى الفرد، وتوافقًا أغنى مستوحى من BORIS."
 
 msgid "Video added."
 msgstr "تمت إضافة الفيديو."
@@ -951,3 +989,298 @@ msgstr "فيديوهات"
 
 msgid "yes"
 msgstr "نعم"
+
+msgid "A title is required for a live observation session."
+msgstr "يلزم عنوان لجلسة ملاحظة مباشرة."
+
+msgid "A title is required for a media observation session."
+msgstr "يلزم عنوان لجلسة ملاحظة تعتمد على الوسائط."
+
+msgid "Add member"
+msgstr "إضافة عضو"
+
+msgid "Add project member"
+msgstr "إضافة عضو إلى المشروع"
+
+msgid "Agreement confusion counts"
+msgstr "أعداد مصفوفة الالتباس للاتفاق"
+
+msgid "Behavior lanes with clickable points and state intervals."
+msgstr "مسارات سلوكية تحتوي على نقاط قابلة للنقر وفواصل زمنية للحالات."
+
+msgid "Bucket size"
+msgstr "حجم الفاصل الزمني"
+
+msgid "Buckets compared"
+msgstr "الفواصل الزمنية المقارنة"
+
+msgid "Cohen kappa"
+msgstr "معامل كابا لكوهين"
+
+msgid "Compare"
+msgstr "مقارنة"
+
+msgid "Comparison label"
+msgstr "تسمية المقارنة"
+
+msgid "Comparison session"
+msgstr "جلسة المقارنة"
+
+msgid "Create keyboard profile"
+msgstr "إنشاء ملف تعريف لوحة المفاتيح"
+
+msgid "Create membership"
+msgstr "إنشاء عضوية"
+
+msgid "Create profile"
+msgstr "إنشاء ملف تعريف"
+
+msgid "Create profile from current bindings"
+msgstr "إنشاء ملف تعريف من الاختصارات الحالية"
+
+msgid "Edit membership"
+msgstr "تعديل العضوية"
+
+msgid "Editor"
+msgstr "محرر"
+
+msgid "Export BORIS project"
+msgstr "تصدير مشروع BORIS"
+
+msgid ""
+"Import complete. Imported events: %(events)s. Imported annotations: "
+"%(annotations)s."
+msgstr ""
+"اكتمل الاستيراد. الأحداث المستوردة: %(events)s. التعليقات المستوردة: "
+"%(annotations)s."
+
+msgid ""
+"Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, "
+"behaviors: %(behaviors)s."
+msgstr ""
+"اكتمل الاستيراد. الفئات الجديدة: %(categories)s، المعدِّلات: %(modifiers)s، "
+"السلوكيات: %(behaviors)s."
+
+msgid "Inter-observer agreement"
+msgstr "الاتفاق بين الملاحظين"
+
+msgid "Keyboard profile"
+msgstr "ملف تعريف لوحة المفاتيح"
+
+msgid "Keyboard profile created from the current project bindings."
+msgstr "تم إنشاء ملف تعريف لوحة المفاتيح من الاختصارات الحالية للمشروع."
+
+msgid "Keyboard profile deleted."
+msgstr "تم حذف ملف تعريف لوحة المفاتيح."
+
+msgid "Keyboard profile refreshed from the current project bindings."
+msgstr "تم تحديث ملف تعريف لوحة المفاتيح من الاختصارات الحالية للمشروع."
+
+msgid "Keyboard profiles"
+msgstr "ملفات تعريف لوحة المفاتيح"
+
+msgid ""
+"Manage the project metadata, explicit team roles, and reusable keyboard "
+"profiles."
+msgstr ""
+"إدارة البيانات الوصفية للمشروع، وأدوار الفريق الصريحة، وملفات تعريف لوحة "
+"المفاتيح القابلة لإعادة الاستخدام."
+
+msgid "No additional members yet."
+msgstr "لا يوجد أعضاء إضافيون بعد."
+
+msgid "No agreement rows yet."
+msgstr "لا توجد صفوف اتفاق بعد."
+
+msgid "No description yet."
+msgstr "لا يوجد وصف بعد."
+
+msgid "No keyboard profiles yet."
+msgstr "لا توجد ملفات تعريف لوحة مفاتيح بعد."
+
+msgid "Only editors or the assigned observer can delete the session."
+msgstr "يمكن للمحررين أو للملاحظ المعيَّن فقط حذف الجلسة."
+
+msgid "Pause timer"
+msgstr "إيقاف المؤقت مؤقتًا"
+
+msgid "Percent agreement"
+msgstr "نسبة الاتفاق"
+
+msgid "Project defaults"
+msgstr "الإعدادات الافتراضية للمشروع"
+
+msgid "Project membership added."
+msgstr "تمت إضافة عضوية المشروع."
+
+msgid "Project membership deleted."
+msgstr "تم حذف عضوية المشروع."
+
+msgid "Project membership updated."
+msgstr "تم تحديث عضوية المشروع."
+
+msgid "Project roles"
+msgstr "أدوار المشروع"
+
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, inter-observer agreement, and consolidated exports."
+msgstr ""
+"تحليلات على مستوى المشروع تشمل إجماليات السلوك، والتفصيل حسب الموضوع، وعدد "
+"الانتقالات، والاتفاق بين الملاحظين، وعمليات التصدير الموحّدة."
+
+msgid "Reference label"
+msgstr "تسمية المرجع"
+
+msgid "Reference session"
+msgstr "الجلسة المرجعية"
+
+msgid "Refresh metadata"
+msgstr "تحديث البيانات الوصفية"
+
+msgid "Reproducibility bundle"
+msgstr "حزمة قابلية إعادة الإنتاج"
+
+msgid "Reset timer"
+msgstr "إعادة ضبط المؤقت"
+
+msgid "Reviewer"
+msgstr "مراجع"
+
+msgid "Role"
+msgstr "الدور"
+
+msgid "Select a session"
+msgstr "اختر جلسة"
+
+msgid "Select two sessions from the same project to compute agreement."
+msgstr "اختر جلستين من المشروع نفسه لحساب الاتفاق."
+
+msgid "Set as default profile"
+msgstr "تعيين كملف تعريف افتراضي"
+
+msgid "Start timer"
+msgstr "بدء المؤقت"
+
+msgid "Team and reproducibility"
+msgstr "الفريق وقابلية إعادة الإنتاج"
+
+msgid ""
+"The profile is generated from the current behavior, modifier, and subject "
+"bindings defined for this project."
+msgstr ""
+"يتم إنشاء الملف التعريفي من اختصارات السلوك والمعدِّلات والموضوعات الحالية "
+"المحددة لهذا المشروع."
+
+msgid ""
+"This project now tracks explicit roles, reusable keyboard profiles, and a "
+"reproducibility export bundle for scientific archiving."
+msgstr ""
+"يتتبع هذا المشروع الآن أدوارًا صريحة وملفات تعريف لوحة مفاتيح قابلة لإعادة "
+"الاستخدام وحزمة تصدير لقابلية إعادة الإنتاج لأغراض الأرشفة العلمية."
+
+msgid "Unsupported session payload format."
+msgstr "تنسيق حمولة الجلسة غير مدعوم."
+
+msgid "Update keyboard profile"
+msgstr "تحديث ملف تعريف لوحة المفاتيح"
+
+msgid "Update membership"
+msgstr "تحديث العضوية"
+
+msgid "Update profile"
+msgstr "تحديث الملف التعريفي"
+
+msgid "User"
+msgstr "المستخدم"
+
+msgid ""
+"Version 0.8.3 adds role-based collaboration, keyboard profiles, agreement "
+"analytics, reproducibility bundles, and expanded scientific translations."
+msgstr ""
+"يضيف الإصدار 0.8.3 تعاونًا قائمًا على الأدوار، وملفات تعريف لوحة المفاتيح، "
+"وتحليلات الاتفاق، وحزم قابلية إعادة الإنتاج، وترجمات علمية موسعة."
+
+msgid "Viewer"
+msgstr "مشاهد"
+
+msgid "You need editor permissions for this project."
+msgstr "تحتاج إلى صلاحيات محرر لهذا المشروع."
+
+msgid "You need editor permissions to create sessions."
+msgstr "تحتاج إلى صلاحيات محرر لإنشاء الجلسات."
+
+msgid "You need editor permissions to delete independent variables."
+msgstr "تحتاج إلى صلاحيات محرر لحذف المتغيرات المستقلة."
+
+msgid "You need editor permissions to delete observation templates."
+msgstr "تحتاج إلى صلاحيات محرر لحذف قوالب الملاحظة."
+
+msgid "You need editor permissions to delete subject groups."
+msgstr "تحتاج إلى صلاحيات محرر لحذف مجموعات الموضوعات."
+
+msgid "You need editor permissions to delete subjects."
+msgstr "تحتاج إلى صلاحيات محرر لحذف الموضوعات."
+
+msgid "You need editor permissions to edit independent variables."
+msgstr "تحتاج إلى صلاحيات محرر لتعديل المتغيرات المستقلة."
+
+msgid "You need editor permissions to edit observation templates."
+msgstr "تحتاج إلى صلاحيات محرر لتعديل قوالب الملاحظة."
+
+msgid "You need editor permissions to edit subject groups."
+msgstr "تحتاج إلى صلاحيات محرر لتعديل مجموعات الموضوعات."
+
+msgid "You need editor permissions to edit subjects."
+msgstr "تحتاج إلى صلاحيات محرر لتعديل الموضوعات."
+
+msgid "You need editor permissions to manage behaviors."
+msgstr "تحتاج إلى صلاحيات محرر لإدارة السلوكيات."
+
+msgid "You need editor permissions to manage categories."
+msgstr "تحتاج إلى صلاحيات محرر لإدارة الفئات."
+
+msgid "You need editor permissions to manage modifiers."
+msgstr "تحتاج إلى صلاحيات محرر لإدارة المعدِّلات."
+
+msgid "You need editor permissions to manage videos."
+msgstr "تحتاج إلى صلاحيات محرر لإدارة مقاطع الفيديو."
+
+msgid "You need editor permissions to modify this session."
+msgstr "تحتاج إلى صلاحيات محرر لتعديل هذه الجلسة."
+
+msgid "You need editor permissions to submit a session for review."
+msgstr "تحتاج إلى صلاحيات محرر لإرسال جلسة للمراجعة."
+
+msgid "You need editor permissions to update sessions."
+msgstr "تحتاج إلى صلاحيات محرر لتحديث الجلسات."
+
+msgid "You need reviewer permissions for this project."
+msgstr "تحتاج إلى صلاحيات مراجع لهذا المشروع."
+
+msgid "You need reviewer permissions to change workflow status."
+msgstr "تحتاج إلى صلاحيات مراجع لتغيير حالة سير العمل."
+
+msgid "You need reviewer permissions to create annotations."
+msgstr "تحتاج إلى صلاحيات مراجع لإنشاء التعليقات التوضيحية."
+
+msgid "You need reviewer permissions to update annotations."
+msgstr "تحتاج إلى صلاحيات مراجع لتحديث التعليقات التوضيحية."
+
+msgid "Your role"
+msgstr "دورك"
+
+msgid "Zoom"
+msgstr "تكبير"
+
+msgid "default"
+msgstr "افتراضي"
+
+msgid "not set"
+msgstr "غير مضبوط"
+
+msgid "read only"
+msgstr "للقراءة فقط"
+
+msgid "viewer"
+msgstr "مشاهد"

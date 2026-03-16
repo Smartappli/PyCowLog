@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% block title %}{% if mode == 'update' %}{% trans 'Update keyboard profile' %}{% else %}{% trans 'Create keyboard profile' %}{% endif %}{% endblock %}
+{% block content %}
+<article class="auth-card wide-card">
+    <h1>{% if mode == 'update' %}{% trans 'Update keyboard profile' %}{% else %}{% trans 'Create keyboard profile' %}{% endif %}</h1>
+    <p>{% trans 'The profile is generated from the current behavior, modifier, and subject bindings defined for this project.' %}</p>
+    <p>{% trans 'Project' %}: <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">{% if mode == 'update' %}{% trans 'Update profile' %}{% else %}{% trans 'Create profile' %}{% endif %}</button>
+            <a href="{% url 'tracker:project_update' project.pk %}" role="button" class="secondary">{% trans 'Back' %}</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

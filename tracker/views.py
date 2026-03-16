@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import io
 import json
+import zipfile
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
@@ -26,10 +29,12 @@ from .forms import (
     DeleteConfirmForm,
     EthogramImportForm,
     IndependentVariableDefinitionForm,
+    KeyboardProfileForm,
     ModifierForm,
     ObservationSessionForm,
     ObservationTemplateForm,
     ProjectForm,
+    ProjectMembershipForm,
     ProjectSettingsForm,
     SessionImportForm,
     SignUpForm,
@@ -41,6 +46,7 @@ from .models import (
     Behavior,
     BehaviorCategory,
     IndependentVariableDefinition,
+    KeyboardProfile,
     Modifier,
     ObservationAuditLog,
     ObservationEvent,
@@ -48,6 +54,7 @@ from .models import (
     ObservationTemplate,
     ObservationVariableValue,
     Project,
+    ProjectMembership,
     SessionAnnotation,
     SessionVideoLink,
     Subject,
@@ -70,11 +77,14 @@ def signup(request):  # pragma: no cover
 
 
 def accessible_projects_qs(user):
+    """Return every project visible to the current authenticated user."""
     return (
-        Project.objects.filter(Q(owner=user) | Q(collaborators=user))
+        Project.objects.filter(
+            Q(owner=user) | Q(collaborators=user) | Q(memberships__user=user)
+        )
         .distinct()
         .select_related('owner')
-        .prefetch_related('collaborators')
+        .prefetch_related('collaborators', 'memberships__user', 'keyboard_profiles')
     )
 
 
@@ -82,18 +92,40 @@ def get_accessible_project(user, pk: int) -> Project:
     return get_object_or_404(accessible_projects_qs(user), pk=pk)
 
 
+def project_role(user, project: Project) -> str | None:
+    return project.role_for_user(user)
+
+
+def _require_project_owner(user, project: Project, message: str | None = None) -> None:
+    if project_role(user, project) != ProjectMembership.ROLE_OWNER:
+        raise PermissionDenied(message or _('Only the project owner can update project settings.'))
+
+
+def _require_project_editor(user, project: Project, message: str | None = None) -> None:
+    if not project.can_edit(user):
+        raise PermissionDenied(message or _('You need editor permissions for this project.'))
+
+
+def _require_project_reviewer(user, project: Project, message: str | None = None) -> None:
+    if not project.can_review(user):
+        raise PermissionDenied(message or _('You need reviewer permissions for this project.'))
+
+
 def get_owned_project(user, pk: int) -> Project:
     project = get_accessible_project(user, pk)
-    if project.owner_id != user.id:
-        raise PermissionDenied(_('Only the project owner can update project settings.'))
+    _require_project_owner(user, project)
     return project
 
 
 def accessible_sessions_qs(user):
     return (
-        ObservationSession.objects.filter(Q(project__owner=user) | Q(project__collaborators=user))
+        ObservationSession.objects.filter(
+            Q(project__owner=user)
+            | Q(project__collaborators=user)
+            | Q(project__memberships__user=user)
+        )
         .distinct()
-        .select_related('project', 'video', 'observer', 'project__owner')
+        .select_related('project', 'video', 'observer', 'project__owner', 'keyboard_profile')
     )
 
 
@@ -106,6 +138,7 @@ def get_accessible_session(user, pk: int) -> ObservationSession:
         'project__subject_groups',
         'project__variable_definitions',
         'project__observation_templates',
+        'project__keyboard_profiles',
         'video_links__video',
         'variable_values__definition',
         'audit_logs__actor',
@@ -124,33 +157,31 @@ def get_accessible_session(user, pk: int) -> ObservationSession:
 
 def _get_owned_category(user, pk: int) -> BehaviorCategory:
     category = get_object_or_404(BehaviorCategory.objects.select_related('project'), pk=pk)
-    if category.project.owner_id != user.id:
-        raise PermissionDenied(_('Only the project owner can manage categories.'))
+    _require_project_editor(user, category.project, _('You need editor permissions to manage categories.'))
     return category
 
 
 def _get_owned_modifier(user, pk: int) -> Modifier:
     modifier = get_object_or_404(Modifier.objects.select_related('project'), pk=pk)
-    if modifier.project.owner_id != user.id:
-        raise PermissionDenied(_('Only the project owner can manage modifiers.'))
+    _require_project_editor(user, modifier.project, _('You need editor permissions to manage modifiers.'))
     return modifier
 
 
 def _get_owned_behavior(user, pk: int) -> Behavior:
     behavior = get_object_or_404(Behavior.objects.select_related('project', 'category'), pk=pk)
-    if behavior.project.owner_id != user.id:
-        raise PermissionDenied(_('Only the project owner can manage behaviors.'))
+    _require_project_editor(user, behavior.project, _('You need editor permissions to manage behaviors.'))
     return behavior
 
 
 def _get_owned_video(user, pk: int) -> VideoAsset:
     video = get_object_or_404(VideoAsset.objects.select_related('project'), pk=pk)
-    if video.project.owner_id != user.id:
-        raise PermissionDenied(_('Only the project owner can manage videos.'))
+    _require_project_editor(user, video.project, _('You need editor permissions to manage videos.'))
     return video
 
 
-def _require_editable_session(session: ObservationSession) -> None:
+def _require_editable_session(session: ObservationSession, user=None) -> None:
+    if user is not None and not session.project.can_edit(user):
+        raise PermissionDenied(_('You need editor permissions to modify this session.'))
     if session.is_locked_for_coding:
         raise PermissionDenied(_('This session is locked and cannot be modified.'))
 
@@ -747,9 +778,206 @@ def build_project_statistics(project: Project) -> dict:
     }
 
 
+
+
+def build_keyboard_profile_payload(project: Project) -> dict[str, dict[str, str]]:
+    """Snapshot the current project shortcut assignments into serializable mappings."""
+    return {
+        'behavior_bindings': {
+            str(item.pk): item.key_binding.upper()
+            for item in project.behaviors.order_by('sort_order', 'name')
+            if item.key_binding
+        },
+        'modifier_bindings': {
+            str(item.pk): item.key_binding.upper()
+            for item in project.modifiers.order_by('sort_order', 'name')
+            if item.key_binding
+        },
+        'subject_bindings': {
+            str(item.pk): item.key_binding.upper()
+            for item in project.subjects.order_by('sort_order', 'name')
+            if item.key_binding
+        },
+    }
+
+
+def _bucket_signature(session: ObservationSession, bucket_seconds: int = 1) -> list[str]:
+    """Create a canonical state/point signature timeline for agreement analysis."""
+    duration = int(max(1, float(_session_duration(session))))
+    signatures: list[str] = []
+    active_states: set[str] = set()
+    events = list(session.events.select_related('behavior').order_by('timestamp_seconds', 'pk'))
+    index = 0
+    for bucket in range(duration + 1):
+        bucket_start = Decimal(str(bucket * bucket_seconds))
+        bucket_end = Decimal(str((bucket + 1) * bucket_seconds))
+        point_labels: list[str] = []
+        while index < len(events) and events[index].timestamp_seconds < bucket_end:
+            event = events[index]
+            label = event.behavior.name
+            if event.behavior.mode == Behavior.MODE_STATE:
+                if event.event_kind == ObservationEvent.KIND_START:
+                    active_states.add(label)
+                elif event.event_kind == ObservationEvent.KIND_STOP and label in active_states:
+                    active_states.remove(label)
+            else:
+                if event.timestamp_seconds >= bucket_start:
+                    point_labels.append(label)
+            index += 1
+        current = sorted(active_states)
+        point_current = sorted(point_labels)
+        signature_parts = current + [f'POINT:{label}' for label in point_current]
+        signatures.append(' | '.join(signature_parts) if signature_parts else '∅')
+    return signatures
+
+
+def build_agreement_analysis(
+    reference_session: ObservationSession,
+    comparison_session: ObservationSession,
+    bucket_seconds: int = 1,
+) -> dict:
+    """Compute a simple pairwise agreement summary and confusion counts."""
+    reference = _bucket_signature(reference_session, bucket_seconds=bucket_seconds)
+    comparison = _bucket_signature(comparison_session, bucket_seconds=bucket_seconds)
+    bucket_count = min(len(reference), len(comparison))
+    if bucket_count == 0:
+        return {
+            'bucket_seconds': bucket_seconds,
+            'bucket_count': 0,
+            'percent_agreement': 0.0,
+            'cohen_kappa': None,
+            'confusion_rows': [],
+        }
+    reference = reference[:bucket_count]
+    comparison = comparison[:bucket_count]
+    labels = sorted(set(reference) | set(comparison))
+    matches = sum(1 for left, right in zip(reference, comparison) if left == right)
+    p0 = matches / bucket_count
+    ref_counts = {label: reference.count(label) for label in labels}
+    cmp_counts = {label: comparison.count(label) for label in labels}
+    pe = sum((ref_counts[label] / bucket_count) * (cmp_counts[label] / bucket_count) for label in labels)
+    kappa = None
+    if pe < 1:
+        kappa = round((p0 - pe) / (1 - pe), 4)
+    confusion: dict[tuple[str, str], int] = defaultdict(int)
+    for left, right in zip(reference, comparison):
+        confusion[(left, right)] += 1
+    confusion_rows = [
+        {'reference_label': left, 'comparison_label': right, 'count': count}
+        for (left, right), count in sorted(
+            confusion.items(), key=lambda item: (-item[1], item[0][0], item[0][1])
+        )
+    ]
+    return {
+        'bucket_seconds': bucket_seconds,
+        'bucket_count': bucket_count,
+        'percent_agreement': round(p0 * 100, 2),
+        'cohen_kappa': kappa,
+        'confusion_rows': confusion_rows,
+    }
+
+
+def build_project_boris_payload(project: Project) -> dict:
+    """Build a richer BORIS-compatible project payload for exchange."""
+    sessions = [
+        build_boris_like_payload(session)
+        for session in project.sessions.select_related('observer', 'video').prefetch_related(
+            'events__behavior',
+            'events__subjects',
+            'events__modifiers',
+            'annotations',
+        )
+    ]
+    payload = build_ethogram_payload(project)
+    payload.update(
+        {
+            'schema': 'boris-project-v1',
+            'subjects': [
+                {
+                    'name': subject.name,
+                    'description': subject.description,
+                    'groups': [group.name for group in subject.groups.order_by('sort_order', 'name')],
+                    'key_binding': subject.key_binding,
+                    'color': subject.color,
+                }
+                for subject in project.subjects.prefetch_related('groups').order_by('sort_order', 'name')
+            ],
+            'subject_groups': [
+                {
+                    'name': group.name,
+                    'description': group.description,
+                    'color': group.color,
+                }
+                for group in project.subject_groups.order_by('sort_order', 'name')
+            ],
+            'variables': [
+                {
+                    'label': definition.label,
+                    'description': definition.description,
+                    'value_type': definition.value_type,
+                    'set_values': definition.value_options,
+                    'default_value': definition.default_value,
+                }
+                for definition in project.variable_definitions.order_by('sort_order', 'label')
+            ],
+            'observation_templates': [
+                {
+                    'name': template.name,
+                    'description': template.description,
+                    'default_session_kind': template.default_session_kind,
+                    'behaviors': list(template.behaviors.order_by('sort_order', 'name').values_list('name', flat=True)),
+                    'modifiers': list(template.modifiers.order_by('sort_order', 'name').values_list('name', flat=True)),
+                    'subjects': list(template.subjects.order_by('sort_order', 'name').values_list('name', flat=True)),
+                    'variable_definitions': list(template.variable_definitions.order_by('sort_order', 'label').values_list('label', flat=True)),
+                }
+                for template in project.observation_templates.prefetch_related(
+                    'behaviors', 'modifiers', 'subjects', 'variable_definitions'
+                ).order_by('name')
+            ],
+            'sessions': sessions,
+        }
+    )
+    return payload
+
+
+def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
+    """Assemble a reproducible export bundle with checksums and rich metadata."""
+    analytics = build_project_statistics(project)
+    boris_payload = build_project_boris_payload(project)
+    ethogram_payload = build_ethogram_payload(project)
+    files: dict[str, bytes] = {
+        'ethogram.json': json.dumps(ethogram_payload, indent=2, ensure_ascii=False).encode('utf-8'),
+        'analytics.json': json.dumps(analytics, indent=2, ensure_ascii=False).encode('utf-8'),
+        'boris_project.json': json.dumps(boris_payload, indent=2, ensure_ascii=False).encode('utf-8'),
+    }
+    session_meta = []
+    for session in project.sessions.order_by('title'):
+        filename = f'sessions/{slugify(session.title) or session.pk}.json'
+        payload = build_boris_like_payload(get_accessible_session(project.owner, session.pk))
+        files[filename] = json.dumps(payload, indent=2, ensure_ascii=False).encode('utf-8')
+        session_meta.append({'id': session.pk, 'title': session.title, 'filename': filename})
+
+    manifest = {
+        'schema': 'pybehaviorlog-0.8.3-bundle',
+        'version': '0.8.3',
+        'project': {
+            'name': project.name,
+            'description': project.description,
+            'owner': project.owner.username,
+        },
+        'exported_at': timezone.now().isoformat(),
+        'sessions': session_meta,
+        'checksums': {
+            name: hashlib.sha256(content).hexdigest() for name, content in files.items()
+        },
+    }
+    files['manifest.json'] = json.dumps(manifest, indent=2, ensure_ascii=False).encode('utf-8')
+    return files
+
+
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.8-ethogram',
+        'schema': 'pybehaviorlog-0.8.3-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -829,6 +1057,7 @@ def import_ethogram_payload(
         'cowlog-django-v4-ethogram',
         'cowlog-django-v5-ethogram',
         'pybehaviorlog-0.8-ethogram',
+        'pybehaviorlog-0.8.3-ethogram',
     }:
         raise ValueError('Unsupported JSON schema.')
 
@@ -1092,6 +1321,7 @@ def import_session_payload(
         'cowlog-django-v5-session',
         'pybehaviorlog-v6-session',
         'pybehaviorlog-0.8-session',
+        'pybehaviorlog-0.8.3-session',
     }:
         event_items = payload.get('events', [])
         annotation_items = payload.get('annotations', [])
@@ -1105,7 +1335,7 @@ def import_session_payload(
             event_items = observations[0].get('events', [])
             annotation_items = observations[0].get('annotations', [])
     else:
-        raise ValueError('Format de session non reconnu.')
+        raise ValueError(_('Unsupported session payload format.'))
 
     event_count = 0
     annotation_count = 0
@@ -1175,9 +1405,19 @@ def import_session_payload(
 
 @login_required
 def home(request):  # pragma: no cover
-    projects = accessible_projects_qs(request.user).prefetch_related(
-        'categories', 'modifiers', 'behaviors', 'videos', 'sessions__video', 'sessions__video_links'
+    projects = list(
+        accessible_projects_qs(request.user).prefetch_related(
+            'categories',
+            'modifiers',
+            'behaviors',
+            'videos',
+            'sessions__video',
+            'sessions__video_links',
+            'memberships__user',
+        )
     )
+    for project in projects:
+        project.current_role = project.role_for_user(request.user)
     return render(request, 'tracker/home.html', {'projects': projects})
 
 
@@ -1188,6 +1428,11 @@ def project_create(request):  # pragma: no cover
         project = form.save(commit=False)
         project.owner = request.user
         project.save()
+        ProjectMembership.objects.update_or_create(
+            project=project,
+            user=request.user,
+            defaults={'role': ProjectMembership.ROLE_OWNER},
+        )
         messages.success(request, _('Project created successfully.'))
         return redirect(project)
     return render(request, 'tracker/project_form.html', {'form': form})
@@ -1196,12 +1441,26 @@ def project_create(request):  # pragma: no cover
 @login_required
 def project_update(request, pk: int):  # pragma: no cover
     project = get_owned_project(request.user, pk)
-    form = ProjectSettingsForm(request.POST or None, instance=project, owner=request.user)
+    form = ProjectSettingsForm(request.POST or None, instance=project)
+    membership_form = ProjectMembershipForm(project=project)
+    keyboard_form = KeyboardProfileForm()
     if request.method == 'POST' and form.is_valid():
         form.save()
         messages.success(request, _('Project settings updated.'))
         return redirect(project)
-    return render(request, 'tracker/project_settings.html', {'form': form, 'project': project})
+    memberships = project.memberships.select_related('user').order_by('role', 'user__username')
+    return render(
+        request,
+        'tracker/project_settings.html',
+        {
+            'form': form,
+            'project': project,
+            'membership_form': membership_form,
+            'memberships': memberships,
+            'keyboard_form': keyboard_form,
+            'keyboard_profiles': project.keyboard_profiles.order_by('name'),
+        },
+    )
 
 
 @login_required
@@ -1220,6 +1479,8 @@ def project_detail(request, pk: int):  # pragma: no cover
             'subject_groups',
             'variable_definitions',
             'observation_templates',
+            'memberships__user',
+            'keyboard_profiles',
         )
         .get(pk=project.pk)
     )
@@ -1230,7 +1491,13 @@ def project_detail(request, pk: int):  # pragma: no cover
         {
             'project': project,
             'is_owner': project.owner_id == request.user.id,
+            'current_role': project_role(request.user, project),
+            'can_edit_project': project.can_edit(request.user),
+            'can_review_project': project.can_review(request.user),
+            'can_manage_members': project.can_manage_members(request.user),
             'analytics': analytics,
+            'memberships': project.memberships.select_related('user').order_by('role', 'user__username'),
+            'keyboard_profiles': project.keyboard_profiles.order_by('name'),
         },
     )
 
@@ -1239,8 +1506,25 @@ def project_detail(request, pk: int):  # pragma: no cover
 def project_analytics(request, pk: int):  # pragma: no cover
     project = get_accessible_project(request.user, pk)
     analytics = build_project_statistics(project)
+    agreement = None
+    comparison_session_id = request.GET.get('comparison_session')
+    reference_session_id = request.GET.get('reference_session')
+    if reference_session_id and comparison_session_id:
+        reference_session = get_accessible_session(request.user, int(reference_session_id))
+        comparison_session = get_accessible_session(request.user, int(comparison_session_id))
+        if reference_session.project_id == project.pk and comparison_session.project_id == project.pk:
+            agreement = build_agreement_analysis(reference_session, comparison_session)
     return render(
-        request, 'tracker/project_analytics.html', {'project': project, 'analytics': analytics}
+        request,
+        'tracker/project_analytics.html',
+        {
+            'project': project,
+            'analytics': analytics,
+            'agreement': agreement,
+            'session_options': project.sessions.order_by('title'),
+            'reference_session_id': reference_session_id,
+            'comparison_session_id': comparison_session_id,
+        },
     )
 
 
@@ -1344,6 +1628,24 @@ def project_export_xlsx(request, pk: int):  # pragma: no cover
             for row in analytics['transition_rows']
         ],
     )
+    reference_session_id = request.GET.get('reference_session')
+    comparison_session_id = request.GET.get('comparison_session')
+    if reference_session_id and comparison_session_id:
+        reference_session = get_accessible_session(request.user, int(reference_session_id))
+        comparison_session = get_accessible_session(request.user, int(comparison_session_id))
+        if reference_session.project_id == project.pk and comparison_session.project_id == project.pk:
+            agreement = build_agreement_analysis(reference_session, comparison_session)
+            agreement_sheet = workbook.create_sheet('Agreement')
+            agreement_sheet.append(['Reference session', reference_session.title])
+            agreement_sheet.append(['Comparison session', comparison_session.title])
+            agreement_sheet.append(['Bucket seconds', agreement['bucket_seconds']])
+            agreement_sheet.append(['Bucket count', agreement['bucket_count']])
+            agreement_sheet.append(['Percent agreement', agreement['percent_agreement']])
+            agreement_sheet.append(['Cohen kappa', agreement['cohen_kappa']])
+            agreement_sheet.append([])
+            agreement_sheet.append(['Reference label', 'Comparison label', 'Count'])
+            for row in agreement['confusion_rows']:
+                agreement_sheet.append([row['reference_label'], row['comparison_label'], row['count']])
 
     _autosize_workbook(workbook)
     response = HttpResponse(
@@ -1353,6 +1655,34 @@ def project_export_xlsx(request, pk: int):  # pragma: no cover
         f'attachment; filename="{slugify(project.name) or "project"}_analytics.xlsx"'
     )
     workbook.save(response)
+    return response
+
+
+@login_required
+def project_export_bundle(request, pk: int):  # pragma: no cover
+    project = get_accessible_project(request.user, pk)
+    bundle_files = build_reproducibility_bundle(project)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for name, content in bundle_files.items():
+            archive.writestr(name, content)
+    response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{slugify(project.name) or "project"}_bundle.zip"'
+    )
+    return response
+
+
+@login_required
+def project_export_boris_json(request, pk: int):  # pragma: no cover
+    project = get_accessible_project(request.user, pk)
+    payload = build_project_boris_payload(project)
+    filename = f'{slugify(project.name) or "project"}_boris_project.json'
+    response = HttpResponse(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        content_type='application/json; charset=utf-8',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -1388,15 +1718,136 @@ def project_import_ethogram(request, pk: int):  # pragma: no cover
         else:
             messages.success(
                 request,
-                f'Import complete. New categories: {category_count}, modifiers: {modifier_count}, behaviors: {behavior_count}.',
+                _('Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, behaviors: %(behaviors)s.') % {'categories': category_count, 'modifiers': modifier_count, 'behaviors': behavior_count},
             )
             return redirect(project)
     return render(request, 'tracker/ethogram_import.html', {'form': form, 'project': project})
 
 
+
+
+@login_required
+def project_membership_create(request, pk: int):  # pragma: no cover
+    project = get_owned_project(request.user, pk)
+    form = ProjectMembershipForm(request.POST or None, project=project)
+    if request.method == 'POST' and form.is_valid():
+        membership = form.save(commit=False)
+        membership.project = project
+        membership.save()
+        messages.success(request, _('Project membership added.'))
+        return redirect('tracker:project_update', pk=project.pk)
+    return render(
+        request,
+        'tracker/project_membership_form.html',
+        {'form': form, 'project': project, 'mode': 'create'},
+    )
+
+
+@login_required
+def project_membership_update(request, pk: int):  # pragma: no cover
+    membership = get_object_or_404(ProjectMembership.objects.select_related('project', 'user'), pk=pk)
+    _require_project_owner(request.user, membership.project)
+    form = ProjectMembershipForm(request.POST or None, instance=membership, project=membership.project)
+    form.fields['user'].disabled = True
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, _('Project membership updated.'))
+        return redirect('tracker:project_update', pk=membership.project.pk)
+    return render(
+        request,
+        'tracker/project_membership_form.html',
+        {'form': form, 'project': membership.project, 'membership': membership, 'mode': 'update'},
+    )
+
+
+@login_required
+def project_membership_delete(request, pk: int):  # pragma: no cover
+    membership = get_object_or_404(ProjectMembership.objects.select_related('project', 'user'), pk=pk)
+    _require_project_owner(request.user, membership.project)
+    form = DeleteConfirmForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        project = membership.project
+        membership.delete()
+        messages.success(request, _('Project membership deleted.'))
+        return redirect('tracker:project_update', pk=project.pk)
+    return render(
+        request,
+        'tracker/delete_confirm.html',
+        {
+            'form': form,
+            'object_label': f'the membership for “{membership.user.username}”',
+            'project': membership.project,
+        },
+    )
+
+
+@login_required
+def keyboard_profile_create(request, pk: int):  # pragma: no cover
+    project = get_owned_project(request.user, pk)
+    form = KeyboardProfileForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        profile = form.save(commit=False)
+        profile.project = project
+        snapshot = build_keyboard_profile_payload(project)
+        profile.behavior_bindings = snapshot['behavior_bindings']
+        profile.modifier_bindings = snapshot['modifier_bindings']
+        profile.subject_bindings = snapshot['subject_bindings']
+        profile.save()
+        messages.success(request, _('Keyboard profile created from the current project bindings.'))
+        return redirect('tracker:project_update', pk=project.pk)
+    return render(
+        request,
+        'tracker/keyboard_profile_form.html',
+        {'form': form, 'project': project, 'mode': 'create'},
+    )
+
+
+@login_required
+def keyboard_profile_update(request, pk: int):  # pragma: no cover
+    profile = get_object_or_404(KeyboardProfile.objects.select_related('project'), pk=pk)
+    _require_project_owner(request.user, profile.project)
+    form = KeyboardProfileForm(request.POST or None, instance=profile)
+    if request.method == 'POST' and form.is_valid():
+        profile = form.save(commit=False)
+        snapshot = build_keyboard_profile_payload(profile.project)
+        profile.behavior_bindings = snapshot['behavior_bindings']
+        profile.modifier_bindings = snapshot['modifier_bindings']
+        profile.subject_bindings = snapshot['subject_bindings']
+        profile.save()
+        messages.success(request, _('Keyboard profile refreshed from the current project bindings.'))
+        return redirect('tracker:project_update', pk=profile.project.pk)
+    return render(
+        request,
+        'tracker/keyboard_profile_form.html',
+        {'form': form, 'project': profile.project, 'profile': profile, 'mode': 'update'},
+    )
+
+
+@login_required
+def keyboard_profile_delete(request, pk: int):  # pragma: no cover
+    profile = get_object_or_404(KeyboardProfile.objects.select_related('project'), pk=pk)
+    _require_project_owner(request.user, profile.project)
+    form = DeleteConfirmForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        project = profile.project
+        profile.delete()
+        messages.success(request, _('Keyboard profile deleted.'))
+        return redirect('tracker:project_update', pk=project.pk)
+    return render(
+        request,
+        'tracker/delete_confirm.html',
+        {
+            'form': form,
+            'object_label': f'the keyboard profile “{profile.name}”',
+            'project': profile.project,
+        },
+    )
+
+
 @login_required
 def category_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = BehaviorCategoryForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         category = form.save(commit=False)
@@ -1446,7 +1897,8 @@ def category_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def modifier_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = ModifierForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         modifier = form.save(commit=False)
@@ -1496,7 +1948,8 @@ def modifier_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def subject_group_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = SubjectGroupForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         group = form.save(commit=False)
@@ -1514,8 +1967,7 @@ def subject_group_create(request, pk: int):  # pragma: no cover
 @login_required
 def subject_group_update(request, pk: int):  # pragma: no cover
     group = get_object_or_404(SubjectGroup.objects.select_related('project'), pk=pk)
-    if group.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can edit subject groups.'))
+    _require_project_editor(request.user, group.project, _('You need editor permissions to edit subject groups.'))
     form = SubjectGroupForm(request.POST or None, instance=group)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -1531,8 +1983,7 @@ def subject_group_update(request, pk: int):  # pragma: no cover
 @login_required
 def subject_group_delete(request, pk: int):  # pragma: no cover
     group = get_object_or_404(SubjectGroup.objects.select_related('project'), pk=pk)
-    if group.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can delete subject groups.'))
+    _require_project_editor(request.user, group.project, _('You need editor permissions to delete subject groups.'))
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = group.project
@@ -1552,7 +2003,8 @@ def subject_group_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def subject_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = SubjectForm(request.POST or None, project=project)
     if request.method == 'POST' and form.is_valid():
         subject = form.save(commit=False)
@@ -1569,8 +2021,7 @@ def subject_create(request, pk: int):  # pragma: no cover
 @login_required
 def subject_update(request, pk: int):  # pragma: no cover
     subject = get_object_or_404(Subject.objects.select_related('project'), pk=pk)
-    if subject.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can edit subjects.'))
+    _require_project_editor(request.user, subject.project, _('You need editor permissions to edit subjects.'))
     form = SubjectForm(request.POST or None, instance=subject, project=subject.project)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -1586,8 +2037,7 @@ def subject_update(request, pk: int):  # pragma: no cover
 @login_required
 def subject_delete(request, pk: int):  # pragma: no cover
     subject = get_object_or_404(Subject.objects.select_related('project'), pk=pk)
-    if subject.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can delete subjects.'))
+    _require_project_editor(request.user, subject.project, _('You need editor permissions to delete subjects.'))
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = subject.project
@@ -1603,7 +2053,8 @@ def subject_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def independent_variable_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = IndependentVariableDefinitionForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         item = form.save(commit=False)
@@ -1623,8 +2074,7 @@ def independent_variable_update(request, pk: int):  # pragma: no cover
     definition = get_object_or_404(
         IndependentVariableDefinition.objects.select_related('project'), pk=pk
     )
-    if definition.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can edit independent variables.'))
+    _require_project_editor(request.user, definition.project, _('You need editor permissions to edit independent variables.'))
     form = IndependentVariableDefinitionForm(request.POST or None, instance=definition)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -1642,8 +2092,7 @@ def independent_variable_delete(request, pk: int):  # pragma: no cover
     definition = get_object_or_404(
         IndependentVariableDefinition.objects.select_related('project'), pk=pk
     )
-    if definition.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can delete independent variables.'))
+    _require_project_editor(request.user, definition.project, _('You need editor permissions to delete independent variables.'))
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = definition.project
@@ -1663,7 +2112,8 @@ def independent_variable_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def observation_template_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = ObservationTemplateForm(request.POST or None, project=project)
     if request.method == 'POST' and form.is_valid():
         template = form.save(commit=False)
@@ -1682,8 +2132,7 @@ def observation_template_create(request, pk: int):  # pragma: no cover
 @login_required
 def observation_template_update(request, pk: int):  # pragma: no cover
     template = get_object_or_404(ObservationTemplate.objects.select_related('project'), pk=pk)
-    if template.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can edit observation templates.'))
+    _require_project_editor(request.user, template.project, _('You need editor permissions to edit observation templates.'))
     form = ObservationTemplateForm(
         request.POST or None, instance=template, project=template.project
     )
@@ -1701,8 +2150,7 @@ def observation_template_update(request, pk: int):  # pragma: no cover
 @login_required
 def observation_template_delete(request, pk: int):  # pragma: no cover
     template = get_object_or_404(ObservationTemplate.objects.select_related('project'), pk=pk)
-    if template.project.owner_id != request.user.id:
-        raise PermissionDenied(_('Only the project owner can delete observation templates.'))
+    _require_project_editor(request.user, template.project, _('You need editor permissions to delete observation templates.'))
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid() and form.cleaned_data['confirm']:
         project = template.project
@@ -1722,7 +2170,8 @@ def observation_template_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def behavior_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = BehaviorForm(request.POST or None, project=project)
     if request.method == 'POST' and form.is_valid():
         behavior = form.save(commit=False)
@@ -1772,7 +2221,8 @@ def behavior_delete(request, pk: int):  # pragma: no cover
 
 @login_required
 def video_create(request, pk: int):  # pragma: no cover
-    project = get_owned_project(request.user, pk)
+    project = get_accessible_project(request.user, pk)
+    _require_project_editor(request.user, project)
     form = VideoAssetForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         video = form.save(commit=False)
@@ -1824,8 +2274,9 @@ def video_delete(request, pk: int):  # pragma: no cover
 @login_required
 def session_create(request, pk: int):  # pragma: no cover
     project = get_object_or_404(
-        accessible_projects_qs(request.user).prefetch_related('videos'), pk=pk
+        accessible_projects_qs(request.user).prefetch_related('videos', 'keyboard_profiles'), pk=pk
     )
+    _require_project_editor(request.user, project, _('You need editor permissions to create sessions.'))
     form = ObservationSessionForm(request.POST or None, project=project)
     if request.method == 'POST' and form.is_valid():
         session = form.save(commit=False)
@@ -1847,6 +2298,7 @@ def session_create(request, pk: int):  # pragma: no cover
 @login_required
 def session_update(request, pk: int):  # pragma: no cover
     session = get_accessible_session(request.user, pk)
+    _require_project_editor(request.user, session.project, _('You need editor permissions to update sessions.'))
     form = ObservationSessionForm(request.POST or None, instance=session, project=session.project)
     if request.method == 'POST' and form.is_valid():
         session = form.save()
@@ -1864,10 +2316,8 @@ def session_update(request, pk: int):  # pragma: no cover
 @login_required
 def session_delete(request, pk: int):  # pragma: no cover
     session = get_accessible_session(request.user, pk)
-    if session.project.owner_id != request.user.id and (session.observer_id != request.user.id):
-        raise PermissionDenied(
-            'Only the project owner or assigned observer can delete the session.'
-        )
+    if not session.project.can_edit(request.user) and session.observer_id != request.user.id:
+        raise PermissionDenied(_('Only editors or the assigned observer can delete the session.'))
     form = DeleteConfirmForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         project = session.project
@@ -1888,7 +2338,7 @@ def session_delete(request, pk: int):  # pragma: no cover
 @login_required
 def session_import_json(request, pk: int):  # pragma: no cover
     session = get_accessible_session(request.user, pk)
-    _require_editable_session(session)
+    _require_editable_session(session, request.user)
     form = SessionImportForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         try:
@@ -1912,7 +2362,7 @@ def session_import_json(request, pk: int):  # pragma: no cover
             )
             messages.success(
                 request,
-                f'Import complete. Imported events: {event_count}. Imported annotations: {annotation_count}.',
+                _('Import complete. Imported events: %(events)s. Imported annotations: %(annotations)s.') % {'events': event_count, 'annotations': annotation_count},
             )
             return redirect(session)
     return render(
@@ -1941,6 +2391,12 @@ def session_workflow_action(request, pk: int):
     }
     if action not in status_map:
         return JsonResponse({'error': _('Invalid workflow action.')}, status=400)
+    if action == 'submit':
+        if not session.project.can_edit(request.user):
+            return JsonResponse({'error': _('You need editor permissions to submit a session for review.')}, status=403)
+    else:
+        if not session.project.can_review(request.user):
+            return JsonResponse({'error': _('You need reviewer permissions to change workflow status.')}, status=403)
     session.workflow_status = status_map[action]
     session.review_notes = review_notes
     now = timezone.now()
@@ -1993,6 +2449,7 @@ def session_player(request, pk: int):  # pragma: no cover
         synced_videos = list(
             session.video_links.select_related('video').order_by('sort_order', 'pk')
         )
+    active_profile = session.effective_keyboard_profile
     return render(
         request,
         'tracker/session_player.html',
@@ -2014,6 +2471,15 @@ def session_player(request, pk: int):  # pragma: no cover
             'annotations': session.annotations.all(),
             'variable_values': session.variable_values.all(),
             'synced_videos': synced_videos,
+            'can_code_session': session.project.can_edit(request.user),
+            'can_review_session': session.project.can_review(request.user),
+            'active_keyboard_profile': active_profile,
+            'keyboard_profiles': session.project.keyboard_profiles.order_by('name'),
+            'keyboard_profile_payload': {
+                'behaviors': active_profile.behavior_bindings if active_profile else {},
+                'modifiers': active_profile.modifier_bindings if active_profile else {},
+                'subjects': active_profile.subject_bindings if active_profile else {},
+            },
         },
     )
 
@@ -2055,7 +2521,7 @@ def session_events_json(request, pk: int):
 @require_POST
 def event_create_api(request, pk: int):
     session = get_accessible_session(request.user, pk)
-    _require_editable_session(session)
+    _require_editable_session(session, request.user)
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -2121,7 +2587,7 @@ def event_update_api(request, pk: int):
         ObservationEvent.objects.select_related('session__project', 'behavior'), pk=pk
     )
     session = get_accessible_session(request.user, event.session_id)
-    _require_editable_session(session)
+    _require_editable_session(session, request.user)
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -2208,7 +2674,7 @@ def event_delete_api(request, pk: int):
     ):
         raise Http404(_('Event not found.'))
     session = get_accessible_session(request.user, event.session_id)
-    _require_editable_session(session)
+    _require_editable_session(session, request.user)
     payload = serialize_event(event)
     event.delete()
     _log_audit(
@@ -2227,7 +2693,7 @@ def event_delete_api(request, pk: int):
 @require_POST
 def annotation_create_api(request, pk: int):
     session = get_accessible_session(request.user, pk)
-    _require_editable_session(session)
+    _require_project_reviewer(request.user, session.project, _('You need reviewer permissions to create annotations.'))
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -2259,7 +2725,7 @@ def annotation_update_api(request, pk: int):
         SessionAnnotation.objects.select_related('session__project'), pk=pk
     )
     session = get_accessible_session(request.user, annotation.session_id)
-    _require_editable_session(session)
+    _require_project_reviewer(request.user, session.project, _('You need reviewer permissions to update annotations.'))
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
@@ -2364,7 +2830,7 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.8-session',
+        'schema': 'pybehaviorlog-0.8.3-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,

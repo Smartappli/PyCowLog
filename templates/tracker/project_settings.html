@@ -1,4 +1,58 @@
 {% extends 'base.html' %}
 {% load i18n %}
 {% block title %}{% trans 'Project settings' %}{% endblock %}
-{% block content %}<article class="auth-card wide-card"><h1>{% trans 'Project settings' %} — {{ project.name }}</h1><p>{% trans 'Manage the project name, description, and collaborators.' %}</p><form method="post">{% csrf_token %}{{ form.as_p }}<div class="action-stack"><button type="submit">{% trans 'Save' %}</button><a href="{{ project.get_absolute_url }}" role="button" class="secondary">{% trans 'Back' %}</a></div></form></article>{% endblock %}
+{% block content %}
+<div class="grid two-columns">
+    <article class="auth-card wide-card">
+        <h1>{% trans 'Project settings' %} — {{ project.name }}</h1>
+        <p>{% trans 'Manage the project metadata, explicit team roles, and reusable keyboard profiles.' %}</p>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="action-stack">
+                <button type="submit">{% trans 'Save' %}</button>
+                <a href="{{ project.get_absolute_url }}" role="button" class="secondary">{% trans 'Back' %}</a>
+            </div>
+        </form>
+    </article>
+
+    <section>
+        <article>
+            <div class="section-headline">
+                <h3>{% trans 'Project roles' %}</h3>
+                <a href="{% url 'tracker:project_membership_create' project.pk %}" role="button" class="secondary">{% trans 'Add member' %}</a>
+            </div>
+            <ul class="managed-list">
+                <li><div><strong>{{ project.owner.username }}</strong> <span class="pill">owner</span></div></li>
+                {% for membership in memberships %}
+                    {% if membership.user_id != project.owner_id %}
+                    <li>
+                        <div><strong>{{ membership.user.username }}</strong> <span class="pill">{{ membership.get_role_display }}</span></div>
+                        <div class="mini-actions"><a href="{% url 'tracker:project_membership_update' membership.pk %}">{% trans 'Edit' %}</a><a href="{% url 'tracker:project_membership_delete' membership.pk %}">{% trans 'Delete' %}</a></div>
+                    </li>
+                    {% endif %}
+                {% empty %}
+                    <li>{% trans 'No additional members yet.' %}</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>{% trans 'Keyboard profiles' %}</h3>
+                <a href="{% url 'tracker:keyboard_profile_create' project.pk %}" role="button" class="secondary">{% trans 'Create profile from current bindings' %}</a>
+            </div>
+            <ul class="managed-list">
+                {% for profile in keyboard_profiles %}
+                    <li>
+                        <div><strong>{{ profile.name }}</strong>{% if profile.is_default %} <span class="pill">{% trans 'default' %}</span>{% endif %}{% if profile.description %}<span class="muted"> — {{ profile.description }}</span>{% endif %}</div>
+                        <div class="mini-actions"><a href="{% url 'tracker:keyboard_profile_update' profile.pk %}">{% trans 'Refresh metadata' %}</a><a href="{% url 'tracker:keyboard_profile_delete' profile.pk %}">{% trans 'Delete' %}</a></div>
+                    </li>
+                {% empty %}
+                    <li>{% trans 'No keyboard profiles yet.' %}</li>
+                {% endfor %}
+            </ul>
+        </article>
+    </section>
+</div>
+{% endblock %}

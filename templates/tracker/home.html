@@ -5,10 +5,11 @@
 
 {% block content %}
 {% trans 'No description yet.' as no_description %}
+{% trans 'viewer' as viewer_label %}
 <header class="page-header">
     <div>
         <h1>{% trans 'My PyBehaviorLog projects' %}</h1>
-        <p>{% trans 'Version 0.8 adds subject groups, observation templates, review workflow, audit trail, subject-level analytics, and richer BORIS-inspired interoperability.' %}</p>
+        <p>{% trans 'Version 0.8.3 adds role-based collaboration, keyboard profiles, agreement analytics, reproducibility bundles, and expanded scientific translations.' %}</p>
     </div>
     <a href="{% url 'tracker:project_create' %}" role="button">{% trans 'New project' %}</a>
 </header>
@@ -21,7 +22,7 @@
                 {% if project.owner_id == user.id %}
                     <span class="pill">{% trans 'owner' %}</span>
                 {% else %}
-                    <span class="pill">{% trans 'collaborator' %}</span>
+                    <span class="pill">{{ project.current_role|default:viewer_label }}</span>
                 {% endif %}
             </div>
             <p>{{ project.description|default:no_description }}</p>

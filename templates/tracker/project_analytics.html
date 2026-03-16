@@ -7,11 +7,11 @@
 <header class="page-header">
     <div>
         <h1>{% trans 'Analytics' %} — {{ project.name }}</h1>
-        <p>{% trans 'Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export.' %}</p>
+        <p>{% trans 'Project-wide analytics with behavior totals, subject breakdowns, transition counts, inter-observer agreement, and consolidated exports.' %}</p>
     </div>
     <div class="action-stack compact">
         <a href="{{ project.get_absolute_url }}" role="button" class="secondary">{% trans 'Back to project' %}</a>
-        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button">{% trans 'Export XLSX' %}</a>
+        <a href="{% url 'tracker:project_export_xlsx' project.pk %}?reference_session={{ reference_session_id }}&comparison_session={{ comparison_session_id }}" role="button">{% trans 'Export XLSX' %}</a>
     </div>
 </header>
 
@@ -28,8 +28,34 @@
         </div>
     </article>
     <article>
-        <h3>{% trans 'What is new in 0.8?' %}</h3>
-        <p>{% trans 'Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions.' %}</p>
+        <h3>{% trans 'Inter-observer agreement' %}</h3>
+        <form method="get" class="panel-inline stacked-form">
+            <label for="reference-session">{% trans 'Reference session' %}</label>
+            <select id="reference-session" name="reference_session">
+                <option value="">{% trans 'Select a session' %}</option>
+                {% for session_option in session_options %}
+                    <option value="{{ session_option.pk }}" {% if reference_session_id == session_option.pk|stringformat:'s' %}selected{% endif %}>{{ session_option.title }}</option>
+                {% endfor %}
+            </select>
+            <label for="comparison-session">{% trans 'Comparison session' %}</label>
+            <select id="comparison-session" name="comparison_session">
+                <option value="">{% trans 'Select a session' %}</option>
+                {% for session_option in session_options %}
+                    <option value="{{ session_option.pk }}" {% if comparison_session_id == session_option.pk|stringformat:'s' %}selected{% endif %}>{{ session_option.title }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">{% trans 'Compare' %}</button>
+        </form>
+        {% if agreement %}
+            <div class="stats-row stacked">
+                <span>{% trans 'Bucket size' %}: {{ agreement.bucket_seconds }} s</span>
+                <span>{% trans 'Buckets compared' %}: {{ agreement.bucket_count }}</span>
+                <span>{% trans 'Percent agreement' %}: {{ agreement.percent_agreement }}%</span>
+                <span>{% trans 'Cohen kappa' %}: {{ agreement.cohen_kappa|default:'—' }}</span>
+            </div>
+        {% else %}
+            <p class="muted">{% trans 'Select two sessions from the same project to compute agreement.' %}</p>
+        {% endif %}
     </article>
 </div>
 
@@ -88,4 +114,20 @@
         </table>
     </div>
 </article>
+
+{% if agreement %}
+<article>
+    <h3>{% trans 'Agreement confusion counts' %}</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>{% trans 'Reference label' %}</th><th>{% trans 'Comparison label' %}</th><th>{% trans 'Count' %}</th></tr></thead>
+            <tbody>
+                {% for row in agreement.confusion_rows %}
+                    <tr><td>{{ row.reference_label }}</td><td>{{ row.comparison_label }}</td><td>{{ row.count }}</td></tr>
+                {% empty %}<tr><td colspan="3">{% trans 'No agreement rows yet.' %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endif %}
 {% endblock %}

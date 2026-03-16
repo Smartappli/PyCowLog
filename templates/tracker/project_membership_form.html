@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% block title %}{% if mode == 'update' %}{% trans 'Edit membership' %}{% else %}{% trans 'Add project member' %}{% endif %}{% endblock %}
+{% block content %}
+<article class="auth-card wide-card">
+    <h1>{% if mode == 'update' %}{% trans 'Edit membership' %}{% else %}{% trans 'Add project member' %}{% endif %}</h1>
+    <p>{% trans 'Project' %}: <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="action-stack">
+            <button type="submit">{% if mode == 'update' %}{% trans 'Update membership' %}{% else %}{% trans 'Create membership' %}{% endif %}</button>
+            <a href="{% url 'tracker:project_update' project.pk %}" role="button" class="secondary">{% trans 'Back' %}</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

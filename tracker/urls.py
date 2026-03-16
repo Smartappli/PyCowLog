@@ -14,6 +14,12 @@ urlpatterns = [
         'projects/<int:pk>/analytics/xlsx/', views.project_export_xlsx, name='project_export_xlsx'
     ),
     path(
+        'projects/<int:pk>/export/bundle/', views.project_export_bundle, name='project_export_bundle'
+    ),
+    path(
+        'projects/<int:pk>/export/boris-json/', views.project_export_boris_json, name='project_export_boris_json'
+    ),
+    path(
         'projects/<int:pk>/ethogram/export/',
         views.project_export_ethogram,
         name='project_export_ethogram',
@@ -44,6 +50,12 @@ urlpatterns = [
     path('projects/<int:pk>/behaviors/new/', views.behavior_create, name='behavior_create'),
     path('projects/<int:pk>/videos/new/', views.video_create, name='video_create'),
     path('projects/<int:pk>/sessions/new/', views.session_create, name='session_create'),
+    path('projects/<int:pk>/memberships/new/', views.project_membership_create, name='project_membership_create'),
+    path('memberships/<int:pk>/edit/', views.project_membership_update, name='project_membership_update'),
+    path('memberships/<int:pk>/delete/', views.project_membership_delete, name='project_membership_delete'),
+    path('projects/<int:pk>/keyboard-profiles/new/', views.keyboard_profile_create, name='keyboard_profile_create'),
+    path('keyboard-profiles/<int:pk>/edit/', views.keyboard_profile_update, name='keyboard_profile_update'),
+    path('keyboard-profiles/<int:pk>/delete/', views.keyboard_profile_delete, name='keyboard_profile_delete'),
     path('categories/<int:pk>/edit/', views.category_update, name='category_update'),
     path('categories/<int:pk>/delete/', views.category_delete, name='category_delete'),
     path('modifiers/<int:pk>/edit/', views.modifier_update, name='modifier_update'),

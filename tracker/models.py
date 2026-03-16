@@ -35,6 +35,116 @@ class Project(models.Model):
     def get_absolute_url(self):
         return reverse('tracker:project_detail', args=[self.pk])
 
+    def role_for_user(self, user) -> str | None:
+        """Return the effective role of a user inside the project."""
+        if not user or not getattr(user, 'is_authenticated', False):
+            return None
+        if self.owner_id == user.id:
+            return ProjectMembership.ROLE_OWNER
+        membership = self.memberships.filter(user=user).only('role').first()
+        if membership is not None:
+            return membership.role
+        if self.collaborators.filter(pk=user.pk).exists():
+            return ProjectMembership.ROLE_EDITOR
+        return None
+
+    def can_view(self, user) -> bool:
+        return self.role_for_user(user) is not None
+
+    def can_edit(self, user) -> bool:
+        return self.role_for_user(user) in {
+            ProjectMembership.ROLE_OWNER,
+            ProjectMembership.ROLE_EDITOR,
+        }
+
+    def can_review(self, user) -> bool:
+        return self.role_for_user(user) in {
+            ProjectMembership.ROLE_OWNER,
+            ProjectMembership.ROLE_EDITOR,
+            ProjectMembership.ROLE_REVIEWER,
+        }
+
+    def can_manage_members(self, user) -> bool:
+        return self.role_for_user(user) == ProjectMembership.ROLE_OWNER
+
+
+class ProjectMembership(models.Model):
+    """Explicit project membership with a role-based permission model."""
+
+    ROLE_OWNER = 'owner'
+    ROLE_EDITOR = 'editor'
+    ROLE_REVIEWER = 'reviewer'
+    ROLE_VIEWER = 'viewer'
+    ROLE_CHOICES = [
+        (ROLE_OWNER, _('Owner')),
+        (ROLE_EDITOR, _('Editor')),
+        (ROLE_REVIEWER, _('Reviewer')),
+        (ROLE_VIEWER, _('Viewer')),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='memberships')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='pybehaviorlog_memberships',
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_VIEWER)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['project__name', 'user__username']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'user'],
+                name='unique_project_membership',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.project.name} - {self.user.username} ({self.role})'
+
+
+class KeyboardProfile(models.Model):
+    """Reusable keyboard profile overriding project-level shortcut defaults."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='keyboard_profiles')
+    name = models.CharField(max_length=120)
+    description = models.CharField(max_length=255, blank=True)
+    is_default = models.BooleanField(default=False)
+    behavior_bindings = models.JSONField(default=dict, blank=True)
+    modifier_bindings = models.JSONField(default=dict, blank=True)
+    subject_bindings = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'name'],
+                name='unique_keyboard_profile_name_per_project',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        for attribute in ('behavior_bindings', 'modifier_bindings', 'subject_bindings'):
+            payload = getattr(self, attribute) or {}
+            cleaned = {
+                str(key): (str(value).upper()[:1] if value else '')
+                for key, value in payload.items()
+                if str(value).strip()
+            }
+            setattr(self, attribute, cleaned)
+        super().save(*args, **kwargs)
+        if self.is_default:
+            KeyboardProfile.objects.filter(project=self.project).exclude(pk=self.pk).update(
+                is_default=False
+            )
+
 
 class BehaviorCategory(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='categories')
@@ -292,6 +402,13 @@ class ObservationSession(models.Model):
         blank=True,
         related_name='sessions',
     )
+    keyboard_profile = models.ForeignKey(
+        KeyboardProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sessions',
+    )
     session_kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_MEDIA)
     workflow_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     title = models.CharField(max_length=200)
@@ -350,6 +467,12 @@ class ObservationSession(models.Model):
         if self.session_kind == self.KIND_LIVE:
             return 'LIVE'
         return self.video.title if self.video_id else 'No media'
+
+    @property
+    def effective_keyboard_profile(self):
+        if self.keyboard_profile_id:
+            return self.keyboard_profile
+        return self.project.keyboard_profiles.filter(is_default=True).first()
 
     @property
     def is_locked_for_coding(self) -> bool:

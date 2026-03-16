@@ -1,3 +1,4 @@
+#
 msgid ""
 msgstr ""
 "Language: ru\n"
@@ -106,8 +107,12 @@ msgstr "Поведение создано."
 msgid "Behavior deleted."
 msgstr "Поведение удалено."
 
-msgid "Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · E = quick note"
-msgstr "Горячая клавиша поведения = мгновенное кодирование · Alt = принудительный START · Shift = принудительный STOP · E = быстрая заметка"
+msgid ""
+"Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · "
+"E = quick note"
+msgstr ""
+"Горячая клавиша поведения = мгновенное кодирование · Alt = принудительный "
+"START · Shift = принудительный STOP · E = быстрая заметка"
 
 msgid "Behavior updated."
 msgstr "Поведение обновлено."
@@ -202,8 +207,12 @@ msgstr "Создать проект"
 msgid "Create session"
 msgstr "Создать сеанс"
 
-msgid "Create your first project to start coding behavior from video or live observation sessions."
-msgstr "Создайте свой первый проект, чтобы начать кодировать поведение по видео или в сеансах живого наблюдения."
+msgid ""
+"Create your first project to start coding behavior from video or live "
+"observation sessions."
+msgstr ""
+"Создайте свой первый проект, чтобы начать кодировать поведение по видео или "
+"в сеансах живого наблюдения."
 
 msgid "Dashboard"
 msgstr "Панель управления"
@@ -367,8 +376,12 @@ msgstr "Invalid modifier_ids or subject_ids."
 msgid "Invalid workflow action."
 msgstr "Invalid workflow action."
 
-msgid "JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-like JSON."
-msgstr "JSON-экспорт PyBehaviorLog 0.8 и более ранних поддерживаемых версий, либо JSON в стиле BORIS."
+msgid ""
+"JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-"
+"like JSON."
+msgstr ""
+"JSON-экспорт PyBehaviorLog 0.8 и более ранних поддерживаемых версий, либо "
+"JSON в стиле BORIS."
 
 msgid "Key binding"
 msgstr "Горячая клавиша"
@@ -425,7 +438,9 @@ msgid "Modifier deleted."
 msgstr "Модификатор удалён."
 
 msgid "Modifier hotkey = toggle on/off · Backspace = clear selection"
-msgstr "Горячая клавиша модификатора = переключить вкл/выкл · Backspace = очистить выбор"
+msgstr ""
+"Горячая клавиша модификатора = переключить вкл/выкл · Backspace = очистить "
+"выбор"
 
 msgid "Modifier updated."
 msgstr "Модификатор обновлён."
@@ -514,8 +529,12 @@ msgstr "Нет доступных модификаторов."
 msgid "No modifiers yet."
 msgstr "Модификаторов пока нет."
 
-msgid "No primary media file is attached to this session. The timer and event coding tools remain available."
-msgstr "No primary media file is attached to this session. The timer and event coding tools remain available."
+msgid ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
+msgstr ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
 
 msgid "No projects yet"
 msgstr "Проектов пока нет"
@@ -670,11 +689,19 @@ msgstr "Настройки проекта"
 msgid "Project settings updated."
 msgstr "Настройки проекта обновлены."
 
-msgid "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
-msgstr "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
+msgstr ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
 
-msgid "PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-like JSON."
-msgstr "JSON PyBehaviorLog 0.8 и более ранних поддерживаемых версий, либо упрощённый JSON в стиле BORIS."
+msgid ""
+"PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-"
+"like JSON."
+msgstr ""
+"JSON PyBehaviorLog 0.8 и более ранних поддерживаемых версий, либо упрощённый"
+" JSON в стиле BORIS."
 
 msgid "Quick overview"
 msgstr "Краткий обзор"
@@ -700,8 +727,12 @@ msgstr "Сохранить"
 msgid "Segments"
 msgstr "Сегменты"
 
-msgid "Select one or more subjects. Selected subjects are attached to the next coded event."
-msgstr "Выберите один или несколько субъектов. Выбранные субъекты будут прикреплены к следующему закодированному событию."
+msgid ""
+"Select one or more subjects. Selected subjects are attached to the next "
+"coded event."
+msgstr ""
+"Выберите один или несколько субъектов. Выбранные субъекты будут прикреплены "
+"к следующему закодированному событию."
 
 msgid "Session"
 msgstr "Сеанс"
@@ -784,8 +815,12 @@ msgstr "Группы субъектов"
 msgid "Subject updated."
 msgstr "Субъект обновлён."
 
-msgid "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
-msgstr "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
+msgid ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
+msgstr ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
 
 msgid "Subjects"
 msgstr "Субъекты"
@@ -862,8 +897,14 @@ msgstr "Тип значения"
 msgid "Variables"
 msgstr "Переменные"
 
-msgid "Version 0.8 adds subject groups, observation templates, review workflow, audit trail, subject-level analytics, and richer BORIS-inspired interoperability."
-msgstr "Версия 0.8 добавляет группы субъектов, шаблоны наблюдений, процесс проверки, журнал аудита, аналитику на уровне субъекта и более богатую совместимость в духе BORIS."
+msgid ""
+"Version 0.8 adds subject groups, observation templates, review workflow, "
+"audit trail, subject-level analytics, and richer BORIS-inspired "
+"interoperability."
+msgstr ""
+"Версия 0.8 добавляет группы субъектов, шаблоны наблюдений, процесс проверки,"
+" журнал аудита, аналитику на уровне субъекта и более богатую совместимость в"
+" духе BORIS."
 
 msgid "Video added."
 msgstr "Видео добавлено."
@@ -951,3 +992,299 @@ msgstr "видео"
 
 msgid "yes"
 msgstr "да"
+
+msgid "A title is required for a live observation session."
+msgstr "Для сеанса живого наблюдения требуется название."
+
+msgid "A title is required for a media observation session."
+msgstr "Для сеанса наблюдения по медиа требуется название."
+
+msgid "Add member"
+msgstr "Добавить участника"
+
+msgid "Add project member"
+msgstr "Добавить участника проекта"
+
+msgid "Agreement confusion counts"
+msgstr "Матрица ошибок согласованности"
+
+msgid "Behavior lanes with clickable points and state intervals."
+msgstr "Дорожки поведения с кликабельными точками и интервалами состояний."
+
+msgid "Bucket size"
+msgstr "Размер интервала"
+
+msgid "Buckets compared"
+msgstr "Сравненные интервалы"
+
+msgid "Cohen kappa"
+msgstr "Каппа Коэна"
+
+msgid "Compare"
+msgstr "Сравнить"
+
+msgid "Comparison label"
+msgstr "Метка сравнения"
+
+msgid "Comparison session"
+msgstr "Сеанс сравнения"
+
+msgid "Create keyboard profile"
+msgstr "Создать профиль клавиатуры"
+
+msgid "Create membership"
+msgstr "Создать членство"
+
+msgid "Create profile"
+msgstr "Создать профиль"
+
+msgid "Create profile from current bindings"
+msgstr "Создать профиль из текущих привязок"
+
+msgid "Edit membership"
+msgstr "Изменить членство"
+
+msgid "Editor"
+msgstr "Редактор"
+
+msgid "Export BORIS project"
+msgstr "Экспортировать проект BORIS"
+
+msgid ""
+"Import complete. Imported events: %(events)s. Imported annotations: "
+"%(annotations)s."
+msgstr ""
+"Импорт завершён. Импортировано событий: %(events)s. Импортировано аннотаций:"
+" %(annotations)s."
+
+msgid ""
+"Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, "
+"behaviors: %(behaviors)s."
+msgstr ""
+"Импорт завершён. Новые категории: %(categories)s, модификаторы: "
+"%(modifiers)s, поведения: %(behaviors)s."
+
+msgid "Inter-observer agreement"
+msgstr "Согласованность наблюдателей"
+
+msgid "Keyboard profile"
+msgstr "Профиль клавиатуры"
+
+msgid "Keyboard profile created from the current project bindings."
+msgstr "Профиль клавиатуры создан из текущих привязок проекта."
+
+msgid "Keyboard profile deleted."
+msgstr "Профиль клавиатуры удалён."
+
+msgid "Keyboard profile refreshed from the current project bindings."
+msgstr "Профиль клавиатуры обновлён из текущих привязок проекта."
+
+msgid "Keyboard profiles"
+msgstr "Профили клавиатуры"
+
+msgid ""
+"Manage the project metadata, explicit team roles, and reusable keyboard "
+"profiles."
+msgstr ""
+"Управляйте метаданными проекта, явными ролями команды и переиспользуемыми "
+"профилями клавиатуры."
+
+msgid "No additional members yet."
+msgstr "Пока нет дополнительных участников."
+
+msgid "No agreement rows yet."
+msgstr "Пока нет строк согласованности."
+
+msgid "No description yet."
+msgstr "Описание пока отсутствует."
+
+msgid "No keyboard profiles yet."
+msgstr "Пока нет профилей клавиатуры."
+
+msgid "Only editors or the assigned observer can delete the session."
+msgstr "Только редакторы или назначенный наблюдатель могут удалить сеанс."
+
+msgid "Pause timer"
+msgstr "Пауза таймера"
+
+msgid "Percent agreement"
+msgstr "Процент согласия"
+
+msgid "Project defaults"
+msgstr "Настройки проекта по умолчанию"
+
+msgid "Project membership added."
+msgstr "Членство в проекте добавлено."
+
+msgid "Project membership deleted."
+msgstr "Членство в проекте удалено."
+
+msgid "Project membership updated."
+msgstr "Членство в проекте обновлено."
+
+msgid "Project roles"
+msgstr "Роли проекта"
+
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, inter-observer agreement, and consolidated exports."
+msgstr ""
+"Аналитика по проекту с итогами по поведению, разбиением по субъектам, "
+"подсчётом переходов, согласованностью наблюдателей и консолидированными "
+"экспортами."
+
+msgid "Reference label"
+msgstr "Эталонная метка"
+
+msgid "Reference session"
+msgstr "Эталонный сеанс"
+
+msgid "Refresh metadata"
+msgstr "Обновить метаданные"
+
+msgid "Reproducibility bundle"
+msgstr "Пакет воспроизводимости"
+
+msgid "Reset timer"
+msgstr "Сбросить таймер"
+
+msgid "Reviewer"
+msgstr "Рецензент"
+
+msgid "Role"
+msgstr "Роль"
+
+msgid "Select a session"
+msgstr "Выберите сеанс"
+
+msgid "Select two sessions from the same project to compute agreement."
+msgstr "Выберите два сеанса одного проекта для расчёта согласованности."
+
+msgid "Set as default profile"
+msgstr "Назначить профилем по умолчанию"
+
+msgid "Start timer"
+msgstr "Запустить таймер"
+
+msgid "Team and reproducibility"
+msgstr "Команда и воспроизводимость"
+
+msgid ""
+"The profile is generated from the current behavior, modifier, and subject "
+"bindings defined for this project."
+msgstr ""
+"Профиль формируется из текущих привязок поведения, модификаторов и "
+"субъектов, заданных для этого проекта."
+
+msgid ""
+"This project now tracks explicit roles, reusable keyboard profiles, and a "
+"reproducibility export bundle for scientific archiving."
+msgstr ""
+"Теперь проект поддерживает явные роли, переиспользуемые профили клавиатуры и"
+" пакет экспорта воспроизводимости для научного архивирования."
+
+msgid "Unsupported session payload format."
+msgstr "Неподдерживаемый формат данных сеанса."
+
+msgid "Update keyboard profile"
+msgstr "Обновить профиль клавиатуры"
+
+msgid "Update membership"
+msgstr "Обновить членство"
+
+msgid "Update profile"
+msgstr "Обновить профиль"
+
+msgid "User"
+msgstr "Пользователь"
+
+msgid ""
+"Version 0.8.3 adds role-based collaboration, keyboard profiles, agreement "
+"analytics, reproducibility bundles, and expanded scientific translations."
+msgstr ""
+"Версия 0.8.3 добавляет ролевое взаимодействие, профили клавиатуры, аналитику"
+" согласованности, пакеты воспроизводимости и расширенные научные переводы."
+
+msgid "Viewer"
+msgstr "Наблюдатель"
+
+msgid "You need editor permissions for this project."
+msgstr "Для этого проекта требуются права редактора."
+
+msgid "You need editor permissions to create sessions."
+msgstr "Для создания сеансов требуются права редактора."
+
+msgid "You need editor permissions to delete independent variables."
+msgstr "Для удаления независимых переменных требуются права редактора."
+
+msgid "You need editor permissions to delete observation templates."
+msgstr "Для удаления шаблонов наблюдения требуются права редактора."
+
+msgid "You need editor permissions to delete subject groups."
+msgstr "Для удаления групп субъектов требуются права редактора."
+
+msgid "You need editor permissions to delete subjects."
+msgstr "Для удаления субъектов требуются права редактора."
+
+msgid "You need editor permissions to edit independent variables."
+msgstr "Для редактирования независимых переменных требуются права редактора."
+
+msgid "You need editor permissions to edit observation templates."
+msgstr "Для редактирования шаблонов наблюдения требуются права редактора."
+
+msgid "You need editor permissions to edit subject groups."
+msgstr "Для редактирования групп субъектов требуются права редактора."
+
+msgid "You need editor permissions to edit subjects."
+msgstr "Для редактирования субъектов требуются права редактора."
+
+msgid "You need editor permissions to manage behaviors."
+msgstr "Для управления поведениями требуются права редактора."
+
+msgid "You need editor permissions to manage categories."
+msgstr "Для управления категориями требуются права редактора."
+
+msgid "You need editor permissions to manage modifiers."
+msgstr "Для управления модификаторами требуются права редактора."
+
+msgid "You need editor permissions to manage videos."
+msgstr "Для управления видео требуются права редактора."
+
+msgid "You need editor permissions to modify this session."
+msgstr "Для изменения этого сеанса требуются права редактора."
+
+msgid "You need editor permissions to submit a session for review."
+msgstr "Для отправки сеанса на рецензирование требуются права редактора."
+
+msgid "You need editor permissions to update sessions."
+msgstr "Для обновления сеансов требуются права редактора."
+
+msgid "You need reviewer permissions for this project."
+msgstr "Для этого проекта требуются права рецензента."
+
+msgid "You need reviewer permissions to change workflow status."
+msgstr "Для изменения статуса рабочего процесса требуются права рецензента."
+
+msgid "You need reviewer permissions to create annotations."
+msgstr "Для создания аннотаций требуются права рецензента."
+
+msgid "You need reviewer permissions to update annotations."
+msgstr "Для обновления аннотаций требуются права рецензента."
+
+msgid "Your role"
+msgstr "Ваша роль"
+
+msgid "Zoom"
+msgstr "Масштаб"
+
+msgid "default"
+msgstr "по умолчанию"
+
+msgid "not set"
+msgstr "не задано"
+
+msgid "read only"
+msgstr "только чтение"
+
+msgid "viewer"
+msgstr "наблюдатель"

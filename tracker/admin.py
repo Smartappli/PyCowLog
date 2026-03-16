@@ -4,8 +4,10 @@ from .models import (
     Behavior,
     BehaviorCategory,
     IndependentVariableDefinition,
+    KeyboardProfile,
     Modifier,
     ObservationAuditLog,
+    ProjectMembership,
     ObservationEvent,
     ObservationSession,
     ObservationTemplate,
@@ -24,6 +26,20 @@ class ProjectAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner', 'created_at')
     search_fields = ('name', 'owner__username')
     filter_horizontal = ('collaborators',)
+
+
+@admin.register(ProjectMembership)
+class ProjectMembershipAdmin(admin.ModelAdmin):
+    list_display = ('project', 'user', 'role', 'created_at')
+    list_filter = ('role', 'project')
+    search_fields = ('project__name', 'user__username')
+
+
+@admin.register(KeyboardProfile)
+class KeyboardProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'project', 'is_default', 'updated_at')
+    list_filter = ('project', 'is_default')
+    search_fields = ('name', 'description')
 
 
 @admin.register(BehaviorCategory)
@@ -101,6 +117,7 @@ class ObservationSessionAdmin(admin.ModelAdmin):
         'project',
         'session_kind',
         'workflow_status',
+        'keyboard_profile',
         'video',
         'observer',
         'playback_rate',

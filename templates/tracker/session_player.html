@@ -10,10 +10,11 @@
         <h1>{{ session.title }}</h1>
         <p>{% trans 'Project' %}: <a href="{{ session.project.get_absolute_url }}">{{ session.project.name }}</a> · {% trans 'Primary source' %}: {{ session.primary_label }} · {% trans 'Workflow' %}: <strong>{{ session.get_workflow_status_display }}</strong></p>
         <p class="muted">{% trans 'Observer' %}: {% firstof session.observer.username not_set %} · {% trans 'Playback' %}: {{ session.playback_rate }}x · {% trans 'Frame step' %}: {{ session.frame_step_seconds }} s · {{ synced_videos|length }} {% trans 'synced video' %}{{ synced_videos|length|pluralize }}</p>
+        <p class="muted">{% trans 'Keyboard profile' %}: <strong>{% if active_keyboard_profile %}{{ active_keyboard_profile.name }}{% else %}{% trans 'Project defaults' %}{% endif %}</strong></p>
     </div>
     <div class="action-stack compact">
         <a href="{% url 'tracker:session_update' session.pk %}" role="button" class="secondary">{% trans 'Settings' %}</a>
-        <a href="{% url 'tracker:session_import_json' session.pk %}" role="button" class="secondary">{% trans 'Import JSON' %}</a>
+        {% if can_code_session %}<a href="{% url 'tracker:session_import_json' session.pk %}" role="button" class="secondary">{% trans 'Import JSON' %}</a>{% endif %}
         <a href="{% url 'tracker:session_export_csv' session.pk %}" role="button" class="secondary">CSV</a>
         <a href="{% url 'tracker:session_export_tsv' session.pk %}" role="button" class="secondary">TSV</a>
         <a href="{% url 'tracker:session_export_json' session.pk %}" role="button" class="secondary">JSON</a>
@@ -27,29 +28,33 @@
         <article>
             <h3>{% trans 'Primary player' %}</h3>
             {% if session.video %}
-            <video id="main-video" controls preload="metadata" class="session-video" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
+            <video id="main-video-media" controls preload="metadata" class="session-video" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
                 <source src="{{ session.video.file.url }}">
             </video>
             {% else %}
-            <div id="main-video" class="session-video live-panel" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
+            <div id="main-video-live" class="session-video live-panel" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
                 <div class="live-panel-inner">
                     <strong>{% trans 'Live session' %}</strong>
                     <p>{% trans 'No primary media file is attached to this session. The timer and event coding tools remain available.' %}</p>
                 </div>
             </div>
             {% endif %}
-            <div class="video-controls-inline">
-                <button type="button" id="play-pause-btn" class="secondary">{% trans 'Play / pause' %}</button>
-                <button type="button" id="back-2-btn" class="secondary">-2 s</button>
-                <button type="button" id="forward-2-btn" class="secondary">+2 s</button>
+            <div class="video-controls-inline wrap-controls">
+                {% if session.video %}
+                    <button type="button" id="play-pause-btn" class="secondary">{% trans 'Play / pause' %}</button>
+                    <button type="button" id="back-2-btn" class="secondary">-2 s</button>
+                    <button type="button" id="forward-2-btn" class="secondary">+2 s</button>
+                {% else %}
+                    <button type="button" id="live-start-btn" class="secondary">{% trans 'Start timer' %}</button>
+                    <button type="button" id="live-pause-btn" class="secondary">{% trans 'Pause timer' %}</button>
+                    <button type="button" id="live-reset-btn" class="secondary">{% trans 'Reset timer' %}</button>
+                {% endif %}
                 <button type="button" id="prev-frame-btn" class="secondary">{% trans '-1 frame' %}</button>
                 <button type="button" id="next-frame-btn" class="secondary">{% trans '+1 frame' %}</button>
                 <button type="button" id="clear-modifiers-btn" class="secondary">{% trans 'Clear modifiers' %}</button>
                 <span id="video-time" class="pill large-pill">0.000 s</span>
             </div>
-            {% if session.notes %}
-                <p class="muted">{{ session.notes }}</p>
-            {% endif %}
+            {% if session.notes %}<p class="muted">{{ session.notes }}</p>{% endif %}
         </article>
 
         {% if synced_videos|length > 1 %}
@@ -71,19 +76,20 @@
         {% endif %}
 
         <article>
-            <h3>{% trans 'Behaviors' %}</h3>
+            <div class="section-headline">
+                <h3>{% trans 'Behaviors' %}</h3>
+                {% if not can_code_session %}<span class="pill">{% trans 'read only' %}</span>{% endif %}
+            </div>
             <div class="keyboard-hint">{% trans 'Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · E = quick note' %}</div>
             <div class="behavior-list">
                 {% for behavior in behaviors %}
-                    <button type="button" class="behavior-button" data-behavior-id="{{ behavior.id }}" data-key="{{ behavior.key_binding|lower }}" data-mode="{{ behavior.mode }}" data-color="{{ behavior.color }}">
+                    <button type="button" class="behavior-button" data-behavior-id="{{ behavior.id }}" data-key="{{ behavior.key_binding|lower }}" data-mode="{{ behavior.mode }}" data-color="{{ behavior.color }}" {% if not can_code_session %}disabled{% endif %}>
                         <span class="behavior-badge" style="background-color: {{ behavior.color }};"></span>
                         <span>{{ behavior.name }}</span>
                         <span class="pill">{{ behavior.get_mode_display }}</span>
                         <kbd>{{ behavior.key_binding }}</kbd>
                     </button>
-                {% empty %}
-                    <p>{% trans 'No behaviors available.' %}</p>
-                {% endfor %}
+                {% empty %}<p>{% trans 'No behaviors available.' %}</p>{% endfor %}
             </div>
         </article>
 
@@ -92,13 +98,11 @@
             <div class="keyboard-hint">{% trans 'Select one or more subjects. Selected subjects are attached to the next coded event.' %}</div>
             <div class="modifier-list" id="subject-list">
                 {% for subject in subjects %}
-                    <button type="button" class="modifier-button subject-button" data-subject-id="{{ subject.id }}" data-key="{{ subject.key_binding|lower }}">
+                    <button type="button" class="modifier-button subject-button" data-subject-id="{{ subject.id }}" data-key="{{ subject.key_binding|lower }}" {% if not can_code_session %}disabled{% endif %}>
                         {% if subject.key_binding %}<kbd>{{ subject.key_binding }}</kbd>{% endif %}
                         <span>{{ subject.name }}</span>
                     </button>
-                {% empty %}
-                    <p>{% trans 'No subjects available.' %}</p>
-                {% endfor %}
+                {% empty %}<p>{% trans 'No subjects available.' %}</p>{% endfor %}
             </div>
             <p id="active-subjects-output" class="muted">{% trans 'No active subjects.' %}</p>
         </article>
@@ -108,13 +112,11 @@
             <div class="keyboard-hint">{% trans 'Modifier hotkey = toggle on/off · Backspace = clear selection' %}</div>
             <div class="modifier-list">
                 {% for modifier in modifiers %}
-                    <button type="button" class="modifier-button" data-modifier-id="{{ modifier.id }}" data-key="{{ modifier.key_binding|lower }}">
+                    <button type="button" class="modifier-button" data-modifier-id="{{ modifier.id }}" data-key="{{ modifier.key_binding|lower }}" {% if not can_code_session %}disabled{% endif %}>
                         <kbd>{{ modifier.key_binding }}</kbd>
                         <span>{{ modifier.name }}</span>
                     </button>
-                {% empty %}
-                    <p>{% trans 'No modifiers available.' %}</p>
-                {% endfor %}
+                {% empty %}<p>{% trans 'No modifiers available.' %}</p>{% endfor %}
             </div>
             <p id="active-modifiers-output" class="muted">{% trans 'No active modifiers.' %}</p>
             <div id="active-states-container" class="state-container"></div>
@@ -123,7 +125,10 @@
         <article>
             <div class="section-headline">
                 <h3>{% trans 'Global timeline' %}</h3>
-                <span class="muted">{% trans 'One-minute buckets' %}</span>
+                <div class="panel-inline">
+                    <label for="timeline-zoom">{% trans 'Zoom' %}</label>
+                    <input id="timeline-zoom" type="range" min="1" max="5" step="0.5" value="1.5">
+                </div>
             </div>
             <div id="timeline-grid" class="timeline-grid"></div>
         </article>
@@ -131,7 +136,7 @@
         <article>
             <div class="section-headline">
                 <h3>{% trans 'Track timeline' %}</h3>
-                <span class="muted">{% trans 'Simplified BORIS-style view' %}</span>
+                <span class="muted">{% trans 'Behavior lanes with clickable points and state intervals.' %}</span>
             </div>
             <div id="track-container" class="track-container"></div>
         </article>
@@ -152,17 +157,7 @@
             </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="stats-table">
-                    <thead>
-                        <tr>
-                            <th>{% trans 'Behavior' %}</th>
-                            <th>{% trans 'Mode' %}</th>
-                            <th>{% trans 'Points' %}</th>
-                            <th>{% trans 'Segments' %}</th>
-                            <th>{% trans 'Duration' %}</th>
-                            <th>%</th>
-                            <th>{% trans 'Open' %}</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>{% trans 'Behavior' %}</th><th>{% trans 'Mode' %}</th><th>{% trans 'Points' %}</th><th>{% trans 'Segments' %}</th><th>{% trans 'Duration' %}</th><th>%</th><th>{% trans 'Open' %}</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -176,15 +171,7 @@
             <div id="integrity-output" class="integrity-box"></div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="intervals-table">
-                    <thead>
-                        <tr>
-                            <th>{% trans 'Behavior' %}</th>
-                            <th>{% trans 'Count' %}</th>
-                            <th>{% trans 'Mean' %}</th>
-                            <th>{% trans 'Min' %}</th>
-                            <th>{% trans 'Max' %}</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>{% trans 'Behavior' %}</th><th>{% trans 'Count' %}</th><th>{% trans 'Mean' %}</th><th>{% trans 'Min' %}</th><th>{% trans 'Max' %}</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -193,18 +180,11 @@
         <article>
             <div class="section-headline">
                 <h3>{% trans 'Annotations' %}</h3>
-                <button type="button" id="add-annotation-btn" class="secondary">{% trans 'Add at current position' %}</button>
+                {% if can_review_session %}<button type="button" id="add-annotation-btn" class="secondary">{% trans 'Add at current position' %}</button>{% endif %}
             </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="annotations-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>{% trans 'Title' %}</th>
-                            <th>{% trans 'Note' %}</th>
-                            <th>{% trans 'Actions' %}</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Time</th><th>{% trans 'Title' %}</th><th>{% trans 'Note' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -213,33 +193,25 @@
         <article>
             <div class="section-headline">
                 <h3>{% trans 'Workflow and audit' %}</h3>
+                {% if can_review_session or can_code_session %}
                 <div class="mini-actions">
-                    <button type="button" id="workflow-submit-btn" class="secondary">{% trans 'Submit for review' %}</button>
-                    <button type="button" id="workflow-validate-btn" class="secondary">{% trans 'Validate' %}</button>
-                    <button type="button" id="workflow-lock-btn" class="secondary">{% trans 'Lock' %}</button>
-                    <button type="button" id="workflow-unlock-btn" class="secondary">{% trans 'Unlock' %}</button>
+                    {% if can_code_session %}<button type="button" id="workflow-submit-btn" class="secondary">{% trans 'Submit for review' %}</button>{% endif %}
+                    {% if can_review_session %}
+                        <button type="button" id="workflow-validate-btn" class="secondary">{% trans 'Validate' %}</button>
+                        <button type="button" id="workflow-lock-btn" class="secondary">{% trans 'Lock' %}</button>
+                        <button type="button" id="workflow-unlock-btn" class="secondary">{% trans 'Unlock' %}</button>
+                    {% endif %}
                 </div>
+                {% endif %}
             </div>
             <div id="audit-output" class="integrity-box"></div>
         </article>
 
         <article>
-            <div class="section-headline">
-                <h3>{% trans 'Events' %}</h3>
-            </div>
+            <div class="section-headline"><h3>{% trans 'Events' %}</h3></div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="events-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>{% trans 'Behavior' %}</th>
-                            <th>{% trans 'Type' %}</th>
-                            <th>{% trans 'Subjects' %}</th>
-                            <th>{% trans 'Modifiers' %}</th>
-                            <th>{% trans 'Comment' %}</th>
-                            <th>{% trans 'Actions' %}</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Time</th><th>{% trans 'Behavior' %}</th><th>{% trans 'Type' %}</th><th>{% trans 'Subjects' %}</th><th>{% trans 'Modifiers' %}</th><th>{% trans 'Comment' %}</th><th>{% trans 'Actions' %}</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -252,11 +224,15 @@
 {{ track_rows|json_script:'track-data' }}
 {{ integrity_report|json_script:'integrity-data' }}
 {{ interval_rows|json_script:'interval-data' }}
+{{ keyboard_profile_payload|json_script:'keyboard-profile-data' }}
 
 <script nonce="{{ csp_nonce }}">
 const sessionId = {{ session.id }};
+const isLiveSession = {% if session.session_kind == 'live' %}true{% else %}false{% endif %};
+const canCodeSession = {% if can_code_session %}true{% else %}false{% endif %};
+const canReviewSession = {% if can_review_session %}true{% else %}false{% endif %};
 const frameStep = Number('{{ session.frame_step_seconds }}');
-const mainVideo = document.getElementById('main-video');
+const videoElement = document.getElementById('main-video-media');
 const syncVideos = [...document.querySelectorAll('.sync-video')];
 const behaviorButtons = [...document.querySelectorAll('.behavior-button')];
 const modifierButtons = [...document.querySelectorAll('.modifier-button:not(.subject-button)')];
@@ -286,6 +262,10 @@ const workflowSubmitBtn = document.getElementById('workflow-submit-btn');
 const workflowValidateBtn = document.getElementById('workflow-validate-btn');
 const workflowLockBtn = document.getElementById('workflow-lock-btn');
 const workflowUnlockBtn = document.getElementById('workflow-unlock-btn');
+const liveStartBtn = document.getElementById('live-start-btn');
+const livePauseBtn = document.getElementById('live-pause-btn');
+const liveResetBtn = document.getElementById('live-reset-btn');
+const timelineZoomInput = document.getElementById('timeline-zoom');
 
 function getCookie(name) {
     return document.cookie.split('; ').find((row) => row.startsWith(`${name}=`))?.split('=')[1] || '';
@@ -324,20 +304,79 @@ let timelineBuckets = JSON.parse(document.getElementById('timeline-data').textCo
 let trackRows = JSON.parse(document.getElementById('track-data').textContent);
 let integrityReport = JSON.parse(document.getElementById('integrity-data').textContent);
 let intervalRows = JSON.parse(document.getElementById('interval-data').textContent);
+const keyboardProfile = JSON.parse(document.getElementById('keyboard-profile-data').textContent || '{}');
 let activeModifierIds = new Set();
 let activeSubjectIds = new Set();
 let auditRows = [];
 let syncing = false;
+let timelineZoom = Number(timelineZoomInput?.value || 1.5);
+let liveClockSeconds = 0;
+let liveTimerRunning = false;
+let liveTimerHandle = null;
+let liveTimerStartedAt = null;
 
 function formatSeconds(value) {
     const numeric = Number(value || 0);
     return `${numeric.toFixed(3)} s`;
 }
 
+function currentTimeValue() {
+    if (isLiveSession) {
+        return liveClockSeconds;
+    }
+    return Number(videoElement?.currentTime || 0);
+}
+
+function updateTimeDisplay() {
+    videoTime.textContent = formatSeconds(currentTimeValue());
+}
+
 function seekAll(seconds) {
-    const t = Math.max(0, Number(seconds || 0));
-    mainVideo.currentTime = t;
-    syncVideos.forEach((video) => { video.currentTime = t; });
+    const target = Math.max(0, Number(seconds || 0));
+    if (isLiveSession) {
+        liveClockSeconds = target;
+        if (liveTimerRunning) {
+            liveTimerStartedAt = Date.now() - (liveClockSeconds * 1000);
+        }
+        updateTimeDisplay();
+        return;
+    }
+    if (videoElement) {
+        videoElement.currentTime = target;
+    }
+    syncVideos.forEach((video) => { video.currentTime = target; });
+}
+
+function getBehaviorKey(button) {
+    return (keyboardProfile.behaviors?.[button.dataset.behaviorId] || button.dataset.key || '').toLowerCase();
+}
+function getModifierKey(button) {
+    return (keyboardProfile.modifiers?.[button.dataset.modifierId] || button.dataset.key || '').toLowerCase();
+}
+function getSubjectKey(button) {
+    return (keyboardProfile.subjects?.[button.dataset.subjectId] || button.dataset.key || '').toLowerCase();
+}
+
+function startLiveTimer() {
+    if (!isLiveSession || liveTimerRunning) return;
+    liveTimerRunning = true;
+    liveTimerStartedAt = Date.now() - (liveClockSeconds * 1000);
+    liveTimerHandle = window.setInterval(() => {
+        liveClockSeconds = (Date.now() - liveTimerStartedAt) / 1000;
+        updateTimeDisplay();
+    }, 100);
+}
+function pauseLiveTimer() {
+    if (!isLiveSession || !liveTimerRunning) return;
+    liveTimerRunning = false;
+    window.clearInterval(liveTimerHandle);
+    liveTimerHandle = null;
+    updateTimeDisplay();
+}
+function resetLiveTimer() {
+    pauseLiveTimer();
+    liveClockSeconds = 0;
+    updateTimeDisplay();
 }
 
 function renderSubjectStates() {
@@ -353,25 +392,11 @@ function renderSubjectStates() {
 
 function renderModifierStates() {
     const activeNames = [];
-    subjectButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-        const subjectId = Number(button.dataset.subjectId);
-        if (activeSubjectIds.has(subjectId)) {
-            activeSubjectIds.delete(subjectId);
-        } else {
-            activeSubjectIds.add(subjectId);
-        }
-        renderSubjectStates();
-    });
-});
-
-modifierButtons.forEach((button) => {
+    modifierButtons.forEach((button) => {
         const modifierId = Number(button.dataset.modifierId);
         const isActive = activeModifierIds.has(modifierId);
         button.classList.toggle('is-active-modifier', isActive);
-        if (isActive) {
-            activeNames.push(button.textContent.trim());
-        }
+        if (isActive) activeNames.push(button.textContent.trim());
     });
     activeModifiersOutput.textContent = activeNames.length ? `${jsI18n.activeModifiers}: ${activeNames.join(' · ')}` : jsI18n.noActiveModifiers;
 }
@@ -409,11 +434,12 @@ function renderStats(rows, summary) {
 }
 
 function renderTimeline() {
+    const bucketWidth = Math.max(56, 48 * timelineZoom);
     timelineGrid.innerHTML = timelineBuckets.map((bucket) => {
-        const height = Math.max(8, bucket.event_count * 8);
+        const height = Math.max(10, bucket.event_count * 8);
         const label = Object.entries(bucket.labels).map(([name, count]) => `${name} (${count})`).join(' · ');
         return `
-            <button type="button" class="timeline-bucket jump-button" data-seconds="${bucket.start_seconds}" title="${label}">
+            <button type="button" class="timeline-bucket jump-button" style="width:${bucketWidth}px" data-seconds="${bucket.start_seconds}" title="${label}">
                 <div class="timeline-bar" style="height:${height}px"></div>
                 <span class="timeline-count">${bucket.event_count}</span>
                 <span class="timeline-label">${Math.round(bucket.start_seconds)}s</span>
@@ -422,7 +448,8 @@ function renderTimeline() {
 }
 
 function renderTracks() {
-    const duration = Math.max(Number(mainVideo.duration || 0), ...trackRows.flatMap((row) => [row.total_duration_seconds, ...row.points, ...row.segments.map((seg) => seg.end_seconds)]), 1);
+    const duration = Math.max(currentTimeValue(), ...trackRows.flatMap((row) => [row.total_duration_seconds, ...row.points, ...row.segments.map((seg) => seg.end_seconds)]), 1);
+    const laneWidth = Math.max(640, duration * 24 * timelineZoom);
     trackContainer.innerHTML = trackRows.map((row) => {
         const segments = row.segments.map((segment) => {
             const left = (segment.start_seconds / duration) * 100;
@@ -436,7 +463,7 @@ function renderTracks() {
         return `
             <div class="track-row">
                 <div class="track-label"><span class="behavior-badge" style="background:${row.color};"></span>${row.name}<span class="pill">${row.mode}</span></div>
-                <div class="track-lane">${segments}${points}</div>
+                <div class="track-lane" style="min-width:${laneWidth}px">${segments}${points}</div>
             </div>`;
     }).join('');
 }
@@ -467,11 +494,11 @@ function renderEvents(events) {
             <td><span class="behavior-badge" style="background-color:${event.color};"></span>${event.behavior}</td>
             <td>${event.event_kind}</td>
             <td>${event.subjects_display || ''}</td>
-            <td>${event.modifiers.map((modifier) => modifier.name).join(', ')}</td>
+            <td>${event.modifiers.map((item) => item.name).join(', ')}</td>
             <td>${event.comment || ''}</td>
             <td class="mini-actions">
-                <button type="button" class="linkish edit-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>${jsI18n.edit}</button>
-                <button type="button" class="linkish delete-event-btn" data-event-id="${event.id}">${jsI18n.delete}</button>
+                ${canCodeSession ? `<button type="button" class="linkish edit-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>${jsI18n.edit}</button>` : ''}
+                ${canCodeSession ? `<button type="button" class="linkish delete-event-btn" data-event-id="${event.id}">${jsI18n.delete}</button>` : ''}
             </td>
         </tr>`).join('');
 }
@@ -483,15 +510,14 @@ function renderAnnotations(annotations) {
             <td><span class="behavior-badge" style="background-color:${annotation.color};"></span>${annotation.title}</td>
             <td>${annotation.note || ''}</td>
             <td class="mini-actions">
-                <button type="button" class="linkish edit-annotation-btn" data-annotation='${JSON.stringify(annotation).replace(/'/g, '&apos;')}'>${jsI18n.edit}</button>
-                <button type="button" class="linkish delete-annotation-btn" data-annotation-id="${annotation.id}">${jsI18n.delete}</button>
+                ${canReviewSession ? `<button type="button" class="linkish edit-annotation-btn" data-annotation='${JSON.stringify(annotation).replace(/'/g, '&apos;')}'>${jsI18n.edit}</button>` : ''}
+                ${canReviewSession ? `<button type="button" class="linkish delete-annotation-btn" data-annotation-id="${annotation.id}">${jsI18n.delete}</button>` : ''}
             </td>
         </tr>`).join('');
 }
 
 async function fetchSessionState() {
-    const duration = mainVideo.duration || mainVideo.currentTime || 0;
-    const response = await fetch(`{% url 'tracker:session_events_json' session.pk %}?duration=${duration}`);
+    const response = await fetch(`{% url 'tracker:session_events_json' session.pk %}?duration=${currentTimeValue()}`);
     const data = await response.json();
     stateStatus = data.state_status;
     timelineBuckets = data.timeline_buckets;
@@ -515,9 +541,8 @@ function renderAudit() {
         auditOutput.innerHTML = `<p class="muted">${jsI18n.noAuditEntries}</p>`;
         return;
     }
-    auditOutput.innerHTML = `<ul class="integrity-list">${auditRows.slice(0, 8).map((row) => `<li><strong>${row.action}</strong> ${row.summary} <span class="muted">${row.actor || ''}</span></li>`).join('')}</ul>`;
+    auditOutput.innerHTML = `<ul class="integrity-list">${auditRows.slice(0, 12).map((row) => `<li><strong>${row.action}</strong> ${row.summary} <span class="muted">${row.actor || ''}</span></li>`).join('')}</ul>`;
 }
-
 
 async function sendJSON(url, payload) {
     const response = await fetch(url, {
@@ -528,13 +553,18 @@ async function sendJSON(url, payload) {
         },
         body: JSON.stringify(payload),
     });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Request failed');
+    }
+    return data;
 }
 
 async function createEventForButton(button, explicitKind = null) {
+    if (!canCodeSession) return;
     const payload = {
         behavior_id: Number(button.dataset.behaviorId),
-        timestamp_seconds: mainVideo.currentTime.toFixed(3),
+        timestamp_seconds: currentTimeValue().toFixed(3),
         modifier_ids: [...activeModifierIds],
         subject_ids: [...activeSubjectIds],
         event_kind: explicitKind,
@@ -544,9 +574,7 @@ async function createEventForButton(button, explicitKind = null) {
 }
 
 function syncPlaybackState(source) {
-    if (syncing) {
-        return;
-    }
+    if (!videoElement || syncing) return;
     syncing = true;
     syncVideos.forEach((video) => {
         video.playbackRate = source.playbackRate;
@@ -564,85 +592,74 @@ function syncPlaybackState(source) {
 
 behaviorButtons.forEach((button) => {
     button.addEventListener('click', async () => {
-        await createEventForButton(button);
+        try { await createEventForButton(button); } catch (error) { alert(error.message); }
     });
 });
-
 subjectButtons.forEach((button) => {
     button.addEventListener('click', () => {
         const subjectId = Number(button.dataset.subjectId);
-        if (activeSubjectIds.has(subjectId)) {
-            activeSubjectIds.delete(subjectId);
-        } else {
-            activeSubjectIds.add(subjectId);
-        }
+        if (activeSubjectIds.has(subjectId)) activeSubjectIds.delete(subjectId); else activeSubjectIds.add(subjectId);
         renderSubjectStates();
     });
 });
-
 modifierButtons.forEach((button) => {
     button.addEventListener('click', () => {
         const modifierId = Number(button.dataset.modifierId);
-        if (activeModifierIds.has(modifierId)) {
-            activeModifierIds.delete(modifierId);
-        } else {
-            activeModifierIds.add(modifierId);
-        }
-        workflowSubmitBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'submit'}); await fetchSessionState(); });
-workflowValidateBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'validate'}); await fetchSessionState(); });
-workflowLockBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'lock'}); await fetchSessionState(); });
-workflowUnlockBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'unlock'}); await fetchSessionState(); });
-
-renderSubjectStates();
-renderModifierStates();
+        if (activeModifierIds.has(modifierId)) activeModifierIds.delete(modifierId); else activeModifierIds.add(modifierId);
+        renderModifierStates();
     });
 });
 
-mainVideo.addEventListener('timeupdate', () => {
-    videoTime.textContent = formatSeconds(mainVideo.currentTime);
-    syncPlaybackState(mainVideo);
-});
-mainVideo.addEventListener('play', () => syncPlaybackState(mainVideo));
-mainVideo.addEventListener('pause', () => syncPlaybackState(mainVideo));
-mainVideo.addEventListener('seeked', () => syncPlaybackState(mainVideo));
-mainVideo.addEventListener('ratechange', () => syncPlaybackState(mainVideo));
+if (videoElement) {
+    videoElement.addEventListener('timeupdate', () => { updateTimeDisplay(); syncPlaybackState(videoElement); });
+    videoElement.addEventListener('play', () => syncPlaybackState(videoElement));
+    videoElement.addEventListener('pause', () => syncPlaybackState(videoElement));
+    videoElement.addEventListener('seeked', () => syncPlaybackState(videoElement));
+    videoElement.addEventListener('ratechange', () => syncPlaybackState(videoElement));
+}
+if (playPauseBtn) {
+    playPauseBtn.addEventListener('click', () => {
+        if (!videoElement) return;
+        if (videoElement.paused) videoElement.play(); else videoElement.pause();
+    });
+}
+back2Btn?.addEventListener('click', () => seekAll(currentTimeValue() - 2));
+forward2Btn?.addEventListener('click', () => seekAll(currentTimeValue() + 2));
+prevFrameBtn?.addEventListener('click', () => seekAll(currentTimeValue() - frameStep));
+nextFrameBtn?.addEventListener('click', () => seekAll(currentTimeValue() + frameStep));
+clearModifiersBtn?.addEventListener('click', () => { activeModifierIds = new Set(); renderModifierStates(); });
+refreshEventsBtn?.addEventListener('click', fetchSessionState);
+liveStartBtn?.addEventListener('click', startLiveTimer);
+livePauseBtn?.addEventListener('click', pauseLiveTimer);
+liveResetBtn?.addEventListener('click', resetLiveTimer);
+timelineZoomInput?.addEventListener('input', () => { timelineZoom = Number(timelineZoomInput.value); renderTimeline(); renderTracks(); });
 
-playPauseBtn.addEventListener('click', () => {
-    if (mainVideo.paused) {
-        mainVideo.play();
-    } else {
-        mainVideo.pause();
-    }
-});
-back2Btn.addEventListener('click', () => seekAll(mainVideo.currentTime - 2));
-forward2Btn.addEventListener('click', () => seekAll(mainVideo.currentTime + 2));
-prevFrameBtn.addEventListener('click', () => seekAll(mainVideo.currentTime - frameStep));
-nextFrameBtn.addEventListener('click', () => seekAll(mainVideo.currentTime + frameStep));
-clearModifiersBtn.addEventListener('click', () => { activeModifierIds = new Set(); renderModifierStates(); });
-refreshEventsBtn.addEventListener('click', fetchSessionState);
-
-addAnnotationBtn.addEventListener('click', async () => {
+addAnnotationBtn?.addEventListener('click', async () => {
     const title = prompt(jsI18n.annotationTitle, jsI18n.defaultAnnotationTitle);
     if (title === null) return;
     const note = prompt(jsI18n.annotationNote, '');
-    await sendJSON(`{% url 'tracker:annotation_create_api' session.pk %}`, {
-        timestamp_seconds: mainVideo.currentTime.toFixed(3),
-        title,
-        note: note || '',
-        color: '#f59e0b',
-    });
-    await fetchSessionState();
+    try {
+        await sendJSON(`{% url 'tracker:annotation_create_api' session.pk %}`, {
+            timestamp_seconds: currentTimeValue().toFixed(3),
+            title,
+            note: note || '',
+            color: '#f59e0b',
+        });
+        await fetchSessionState();
+    } catch (error) { alert(error.message); }
 });
+
+workflowSubmitBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'submit'}); await fetchSessionState(); } catch (error) { alert(error.message); } });
+workflowValidateBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'validate'}); await fetchSessionState(); } catch (error) { alert(error.message); } });
+workflowLockBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'lock'}); await fetchSessionState(); } catch (error) { alert(error.message); } });
+workflowUnlockBtn?.addEventListener('click', async () => { try { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'unlock'}); await fetchSessionState(); } catch (error) { alert(error.message); } });
 
 document.addEventListener('click', async (event) => {
     const jumpButton = event.target.closest('.jump-button');
-    if (jumpButton) {
-        seekAll(Number(jumpButton.dataset.seconds));
-    }
+    if (jumpButton) seekAll(Number(jumpButton.dataset.seconds));
     const deleteEventBtn = event.target.closest('.delete-event-btn');
     if (deleteEventBtn && confirm(jsI18n.deleteEventConfirm)) {
-        await sendJSON(`/events/${deleteEventBtn.dataset.eventId}/delete/`, {});
-        await fetchSessionState();
+        try { await sendJSON(`/events/${deleteEventBtn.dataset.eventId}/delete/`, {}); await fetchSessionState(); } catch (error) { alert(error.message); }
     }
     const editEventBtn = event.target.closest('.edit-event-btn');
     if (editEventBtn) {
@@ -652,20 +669,21 @@ document.addEventListener('click', async (event) => {
         if (newComment === null) return;
         const newTime = prompt(jsI18n.timeSeconds, eventData.timestamp_seconds);
         if (newTime === null) return;
-        await sendJSON(`/events/${eventData.id}/update/`, {
-            behavior_id: eventData.behavior_id,
-            timestamp_seconds: newTime,
-            event_kind: eventData.event_kind,
-            comment: newComment,
-            modifier_ids: eventData.modifiers.map((item) => item.id),
-            subject_ids: eventData.subjects.map((item) => item.id),
-        });
-        await fetchSessionState();
+        try {
+            await sendJSON(`/events/${eventData.id}/update/`, {
+                behavior_id: eventData.behavior_id,
+                timestamp_seconds: newTime,
+                event_kind: eventData.event_kind,
+                comment: newComment,
+                modifier_ids: eventData.modifiers.map((item) => item.id),
+                subject_ids: eventData.subjects.map((item) => item.id),
+            });
+            await fetchSessionState();
+        } catch (error) { alert(error.message); }
     }
     const deleteAnnotationBtn = event.target.closest('.delete-annotation-btn');
     if (deleteAnnotationBtn && confirm(jsI18n.deleteAnnotationConfirm)) {
-        await sendJSON(`/annotations/${deleteAnnotationBtn.dataset.annotationId}/delete/`, {});
-        await fetchSessionState();
+        try { await sendJSON(`/annotations/${deleteAnnotationBtn.dataset.annotationId}/delete/`, {}); await fetchSessionState(); } catch (error) { alert(error.message); }
     }
     const editAnnotationBtn = event.target.closest('.edit-annotation-btn');
     if (editAnnotationBtn) {
@@ -677,23 +695,23 @@ document.addEventListener('click', async (event) => {
         if (note === null) return;
         const newTime = prompt(jsI18n.timeSeconds, annotation.timestamp_seconds);
         if (newTime === null) return;
-        await sendJSON(`/annotations/${annotation.id}/update/`, {
-            timestamp_seconds: newTime,
-            title,
-            note,
-            color: annotation.color,
-        });
-        await fetchSessionState();
+        try {
+            await sendJSON(`/annotations/${annotation.id}/update/`, {
+                timestamp_seconds: newTime,
+                title,
+                note,
+                color: annotation.color,
+            });
+            await fetchSessionState();
+        } catch (error) { alert(error.message); }
     }
 });
 
 document.addEventListener('keydown', async (event) => {
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
-        return;
-    }
-    if (event.code === 'Space') {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    if (!isLiveSession && event.code === 'Space') {
         event.preventDefault();
-        playPauseBtn.click();
+        playPauseBtn?.click();
         return;
     }
     if (event.key === 'Backspace') {
@@ -702,39 +720,35 @@ document.addEventListener('keydown', async (event) => {
         renderModifierStates();
         return;
     }
-    if (event.key.toLowerCase() === 'e') {
+    if (event.key.toLowerCase() === 'e' && canReviewSession) {
         event.preventDefault();
-        addAnnotationBtn.click();
+        addAnnotationBtn?.click();
         return;
     }
-    const subjectButton = subjectButtons.find((button) => button.dataset.key === event.key.toLowerCase());
-    if (subjectButton) {
-        subjectButton.click();
-        return;
-    }
-    const modifierButton = modifierButtons.find((button) => button.dataset.key === event.key.toLowerCase());
-    if (modifierButton) {
-        modifierButton.click();
-        return;
-    }
-    const behaviorButton = behaviorButtons.find((button) => button.dataset.key === event.key.toLowerCase());
-    if (behaviorButton) {
+    const subjectButton = subjectButtons.find((button) => getSubjectKey(button) === event.key.toLowerCase());
+    if (subjectButton && canCodeSession) { subjectButton.click(); return; }
+    const modifierButton = modifierButtons.find((button) => getModifierKey(button) === event.key.toLowerCase());
+    if (modifierButton && canCodeSession) { modifierButton.click(); return; }
+    const behaviorButton = behaviorButtons.find((button) => getBehaviorKey(button) === event.key.toLowerCase());
+    if (behaviorButton && canCodeSession) {
         event.preventDefault();
         let explicitKind = null;
         if (behaviorButton.dataset.mode === 'state') {
             if (event.altKey) explicitKind = 'start';
             if (event.shiftKey) explicitKind = 'stop';
         }
-        await createEventForButton(behaviorButton, explicitKind);
+        try { await createEventForButton(behaviorButton, explicitKind); } catch (error) { alert(error.message); }
     }
 });
 
+renderSubjectStates();
 renderModifierStates();
 renderTimeline();
 renderTracks();
 renderIntegrity();
 renderIntervals();
 renderActiveStates();
+updateTimeDisplay();
 fetchSessionState();
 </script>
 {% endblock %}

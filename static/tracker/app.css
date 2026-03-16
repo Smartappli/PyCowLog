@@ -430,3 +430,22 @@ helptext, .helptext { display: block; margin-top: .3rem; color: var(--ink-soft);
         align-items: stretch;
     }
 }
+
+.wrap-controls {
+    flex-wrap: wrap;
+    gap: .55rem;
+}
+
+.stacked-form {
+    display: grid;
+    gap: .65rem;
+}
+
+.track-container {
+    overflow-x: auto;
+}
+
+.timeline-grid {
+    overflow-x: auto;
+    align-items: end;
+}

@@ -3,9 +3,11 @@ from django.test import TestCase
 
 from tracker.forms import (
     BehaviorForm,
+    KeyboardProfileForm,
     ModifierForm,
     ObservationSessionForm,
     ObservationTemplateForm,
+    ProjectMembershipForm,
     ProjectSettingsForm,
     SubjectForm,
     VideoAssetForm,
@@ -14,9 +16,11 @@ from tracker.models import (
     Behavior,
     BehaviorCategory,
     IndependentVariableDefinition,
+    KeyboardProfile,
     Modifier,
     ObservationSession,
     Project,
+    ProjectMembership,
     Subject,
     SubjectGroup,
     VideoAsset,
@@ -45,11 +49,20 @@ class ObservationSessionFormTests(TestCase):
             value_type=IndependentVariableDefinition.TYPE_BOOLEAN,
             default_value='false',
         )
+        self.profile = KeyboardProfile.objects.create(
+            project=self.project,
+            name='Default',
+            is_default=True,
+            behavior_bindings={},
+            modifier_bindings={},
+            subject_bindings={},
+        )
 
     def test_media_session_requires_video(self):
         form = ObservationSessionForm(
             data={
                 'session_kind': 'media',
+                'keyboard_profile': self.profile.pk,
                 'title': 'Session 1',
                 'playback_rate': '1.00',
                 'frame_step_seconds': '0.0400',
@@ -65,6 +78,7 @@ class ObservationSessionFormTests(TestCase):
         form = ObservationSessionForm(
             data={
                 'session_kind': 'live',
+                'keyboard_profile': self.profile.pk,
                 'title': 'Session 1',
                 'playback_rate': '1.00',
                 'frame_step_seconds': '0.0400',
@@ -81,6 +95,7 @@ class ObservationSessionFormTests(TestCase):
             data={
                 'session_kind': 'media',
                 'video': self.video.pk,
+                'keyboard_profile': self.profile.pk,
                 'title': 'Session 1',
                 'playback_rate': '1.00',
                 'frame_step_seconds': '0.0400',
@@ -97,6 +112,7 @@ class ObservationSessionFormTests(TestCase):
             title='Session 1',
             session_kind=ObservationSession.KIND_MEDIA,
             video=self.video,
+            keyboard_profile=self.profile,
         )
         form.save_variable_values(session)
         values = {item.definition.label: item.value for item in session.variable_values.all()}
@@ -155,6 +171,7 @@ class AdditionalFormCoverageTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username='owner', password='pass12345')
         self.other = User.objects.create_user(username='other', password='pass12345')
+        self.viewer = User.objects.create_user(username='viewer', password='pass12345')
         self.project = Project.objects.create(owner=self.owner, name='Project 1')
         self.category = BehaviorCategory.objects.create(project=self.project, name='General')
         self.video = VideoAsset.objects.create(
@@ -170,13 +187,27 @@ class AdditionalFormCoverageTests(TestCase):
             label='Context',
             value_type=IndependentVariableDefinition.TYPE_LONGTEXT,
         )
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.viewer,
+            role=ProjectMembership.ROLE_VIEWER,
+        )
 
-    def test_project_settings_excludes_owner(self):
-        form = ProjectSettingsForm(owner=self.owner)
-        self.assertNotIn(self.owner, form.fields['collaborators'].queryset)
-        self.assertIn(self.other, form.fields['collaborators'].queryset)
+    def test_project_settings_form_fields(self):
+        form = ProjectSettingsForm(instance=self.project)
+        self.assertIn('name', form.fields)
+        self.assertNotIn('collaborators', form.fields)
 
-    def test_modifier_and_behavior_key_cleaning(self):
+    def test_project_membership_form_excludes_owner_and_existing_members(self):
+        form = ProjectMembershipForm(project=self.project)
+        self.assertNotIn(self.owner, form.fields['user'].queryset)
+        self.assertNotIn(self.viewer, form.fields['user'].queryset)
+        self.assertIn(self.other, form.fields['user'].queryset)
+
+    def test_keyboard_profile_form_and_key_cleaning(self):
+        profile_form = KeyboardProfileForm(
+            data={'name': 'Alt profile', 'description': 'Test', 'is_default': True}
+        )
         modifier_form = ModifierForm(
             data={'name': 'Near', 'description': '', 'key_binding': 'n', 'sort_order': 0}
         )
@@ -192,6 +223,7 @@ class AdditionalFormCoverageTests(TestCase):
             },
             project=self.project,
         )
+        self.assertTrue(profile_form.is_valid(), profile_form.errors)
         self.assertTrue(modifier_form.is_valid(), modifier_form.errors)
         self.assertEqual(modifier_form.clean_key_binding(), 'N')
         self.assertTrue(behavior_form.is_valid(), behavior_form.errors)
@@ -202,11 +234,19 @@ class AdditionalFormCoverageTests(TestCase):
         form = VideoAssetForm(instance=self.video)
         self.assertFalse(form.fields['file'].required)
 
-    def test_session_form_supports_timestamp_and_longtext_variables(self):
+    def test_session_form_supports_timestamp_longtext_and_keyboard_profiles(self):
+        profile = KeyboardProfile.objects.create(
+            project=self.project,
+            name='Profile A',
+            behavior_bindings={},
+            modifier_bindings={},
+            subject_bindings={},
+        )
         form = ObservationSessionForm(
             data={
                 'session_kind': 'media',
                 'video': self.video.pk,
+                'keyboard_profile': profile.pk,
                 'title': 'Session 1',
                 'playback_rate': '1.00',
                 'frame_step_seconds': '0.0400',
@@ -223,6 +263,7 @@ class AdditionalFormCoverageTests(TestCase):
             title='Existing session',
             session_kind=ObservationSession.KIND_MEDIA,
             video=self.video,
+            keyboard_profile=profile,
         )
         form.save_variable_values(session)
         values = {item.definition.label: item.value for item in session.variable_values.all()}

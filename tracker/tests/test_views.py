@@ -1,10 +1,19 @@
 import json
+from zipfile import ZipFile
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from tracker.models import Behavior, ObservationSession, Project, Subject
+from tracker.models import (
+    Behavior,
+    KeyboardProfile,
+    ObservationSession,
+    Project,
+    ProjectMembership,
+    Subject,
+)
 
 User = get_user_model()
 
@@ -12,11 +21,31 @@ User = get_user_model()
 class ViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='olivier', password='pass12345')
+        self.reviewer = User.objects.create_user(username='reviewer', password='pass12345')
+        self.viewer = User.objects.create_user(username='viewer', password='pass12345')
         self.client = Client()
         self.client.login(username='olivier', password='pass12345')
         self.project = Project.objects.create(owner=self.user, name='Project 1')
         self.behavior = Behavior.objects.create(project=self.project, name='Eat', key_binding='e')
         self.subject = Subject.objects.create(project=self.project, name='Cow 1', key_binding='c')
+        self.profile = KeyboardProfile.objects.create(
+            project=self.project,
+            name='Default',
+            is_default=True,
+            behavior_bindings={str(self.behavior.pk): 'E'},
+            modifier_bindings={},
+            subject_bindings={str(self.subject.pk): 'C'},
+        )
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.reviewer,
+            role=ProjectMembership.ROLE_REVIEWER,
+        )
+        ProjectMembership.objects.create(
+            project=self.project,
+            user=self.viewer,
+            role=ProjectMembership.ROLE_VIEWER,
+        )
 
     def test_home_requires_login(self):
         anon = Client()
@@ -33,6 +62,7 @@ class ViewTests(TestCase):
             title='Live session',
             observer=self.user,
             session_kind='live',
+            keyboard_profile=self.profile,
         )
         response = self.client.post(
             reverse('tracker:event_create_api', args=[session.pk]),
@@ -60,7 +90,7 @@ class ViewTests(TestCase):
 
         export_response = self.client.get(reverse('tracker:session_export_json', args=[session.pk]))
         self.assertEqual(export_response.status_code, 200)
-        self.assertIn('pybehaviorlog-0.8-session', export_response.content.decode('utf-8'))
+        self.assertIn('pybehaviorlog-0.8.3-session', export_response.content.decode('utf-8'))
 
     def test_event_update_and_delete_api(self):
         session = self.project.sessions.create(
@@ -91,21 +121,23 @@ class ViewTests(TestCase):
         self.assertEqual(delete_response.status_code, 200)
         self.assertFalse(session.events.exists())
 
-    def test_annotation_workflow_and_audit_endpoints(self):
+    def test_annotation_workflow_and_audit_endpoints_for_reviewer(self):
         session = ObservationSession.objects.create(
             project=self.project,
             observer=self.user,
             title='Workflow session',
             session_kind='live',
         )
-        annotation_response = self.client.post(
+        reviewer_client = Client()
+        reviewer_client.login(username='reviewer', password='pass12345')
+        annotation_response = reviewer_client.post(
             reverse('tracker:annotation_create_api', args=[session.pk]),
             data=json.dumps({'timestamp_seconds': 1.0, 'title': 'Mark', 'note': 'Note'}),
             content_type='application/json',
         )
         self.assertEqual(annotation_response.status_code, 201)
 
-        workflow_response = self.client.post(
+        workflow_response = reviewer_client.post(
             reverse('tracker:session_workflow_action', args=[session.pk]),
             data=json.dumps({'action': 'validate', 'review_notes': 'Checked'}),
             content_type='application/json',
@@ -115,9 +147,25 @@ class ViewTests(TestCase):
         self.assertEqual(session.workflow_status, ObservationSession.STATUS_VALIDATED)
         self.assertEqual(session.review_notes, 'Checked')
 
-        audit_response = self.client.get(reverse('tracker:session_audit_json', args=[session.pk]))
+        audit_response = reviewer_client.get(reverse('tracker:session_audit_json', args=[session.pk]))
         self.assertEqual(audit_response.status_code, 200)
         self.assertGreaterEqual(len(audit_response.json()['audit_rows']), 2)
+
+    def test_viewer_cannot_code(self):
+        session = ObservationSession.objects.create(
+            project=self.project,
+            observer=self.user,
+            title='Viewer session',
+            session_kind='live',
+        )
+        viewer_client = Client()
+        viewer_client.login(username='viewer', password='pass12345')
+        response = viewer_client.post(
+            reverse('tracker:event_create_api', args=[session.pk]),
+            data=json.dumps({'behavior_id': self.behavior.pk, 'timestamp_seconds': 1.5}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_locked_session_blocks_event_creation(self):
         session = ObservationSession.objects.create(
@@ -133,3 +181,28 @@ class ViewTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_project_bundle_export(self):
+        self.project.sessions.create(title='Bundle session', observer=self.user, session_kind='live')
+        response = self.client.get(reverse('tracker:project_export_bundle', args=[self.project.pk]))
+        self.assertEqual(response.status_code, 200)
+        archive = ZipFile(BytesIO(response.content))
+        self.assertIn('manifest.json', archive.namelist())
+        self.assertIn('ethogram.json', archive.namelist())
+
+    def test_project_analytics_agreement(self):
+        session_a = self.project.sessions.create(title='A', observer=self.user, session_kind='live')
+        session_b = self.project.sessions.create(title='B', observer=self.user, session_kind='live')
+        for session in [session_a, session_b]:
+            self.client.post(
+                reverse('tracker:event_create_api', args=[session.pk]),
+                data=json.dumps({'behavior_id': self.behavior.pk, 'timestamp_seconds': 1.0}),
+                content_type='application/json',
+            )
+        response = self.client.get(
+            reverse('tracker:project_analytics', args=[self.project.pk]),
+            {'reference_session': session_a.pk, 'comparison_session': session_b.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['agreement']['cohen_kappa'], 1.0)
+        self.assertContains(response, '100', status_code=200)

@@ -1,3 +1,4 @@
+#
 msgid ""
 msgstr ""
 "Language: zh_Hans\n"
@@ -106,7 +107,9 @@ msgstr "行为已创建。"
 msgid "Behavior deleted."
 msgstr "行为已删除。"
 
-msgid "Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · E = quick note"
+msgid ""
+"Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · "
+"E = quick note"
 msgstr "行为快捷键 = 即时编码 · Alt = 强制 START · Shift = 强制 STOP · E = 快速备注"
 
 msgid "Behavior updated."
@@ -202,7 +205,9 @@ msgstr "创建项目"
 msgid "Create session"
 msgstr "创建会话"
 
-msgid "Create your first project to start coding behavior from video or live observation sessions."
+msgid ""
+"Create your first project to start coding behavior from video or live "
+"observation sessions."
 msgstr "创建你的第一个项目，以便从视频或实时观察会话开始进行行为编码。"
 
 msgid "Dashboard"
@@ -367,7 +372,9 @@ msgstr "Invalid modifier_ids or subject_ids."
 msgid "Invalid workflow action."
 msgstr "Invalid workflow action."
 
-msgid "JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-like JSON."
+msgid ""
+"JSON export from PyBehaviorLog 0.8 and earlier supported versions or BORIS-"
+"like JSON."
 msgstr "PyBehaviorLog 0.8 及更早受支持版本的 JSON 导出，或 BORIS 风格 JSON。"
 
 msgid "Key binding"
@@ -514,8 +521,12 @@ msgstr "没有可用修饰符。"
 msgid "No modifiers yet."
 msgstr "暂无修饰符。"
 
-msgid "No primary media file is attached to this session. The timer and event coding tools remain available."
-msgstr "No primary media file is attached to this session. The timer and event coding tools remain available."
+msgid ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
+msgstr ""
+"No primary media file is attached to this session. The timer and event "
+"coding tools remain available."
 
 msgid "No projects yet"
 msgstr "还没有项目"
@@ -670,10 +681,16 @@ msgstr "项目设置"
 msgid "Project settings updated."
 msgstr "项目设置已更新。"
 
-msgid "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
-msgstr "Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export."
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
+msgstr ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, and consolidated Excel export."
 
-msgid "PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-like JSON."
+msgid ""
+"PyBehaviorLog 0.8 and earlier supported versions JSON or simplified BORIS-"
+"like JSON."
 msgstr "PyBehaviorLog 0.8 及更早受支持版本 JSON，或简化的 BORIS 风格 JSON。"
 
 msgid "Quick overview"
@@ -700,7 +717,9 @@ msgstr "保存"
 msgid "Segments"
 msgstr "区段"
 
-msgid "Select one or more subjects. Selected subjects are attached to the next coded event."
+msgid ""
+"Select one or more subjects. Selected subjects are attached to the next "
+"coded event."
 msgstr "选择一个或多个对象。所选对象将附加到下一个编码事件。"
 
 msgid "Session"
@@ -784,8 +803,12 @@ msgstr "对象组"
 msgid "Subject updated."
 msgstr "对象已更新。"
 
-msgid "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
-msgstr "Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions."
+msgid ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
+msgstr ""
+"Subject-level summaries and transition analytics now complement the behavior"
+" totals already available in earlier versions."
 
 msgid "Subjects"
 msgstr "对象"
@@ -862,7 +885,10 @@ msgstr "值类型"
 msgid "Variables"
 msgstr "变量"
 
-msgid "Version 0.8 adds subject groups, observation templates, review workflow, audit trail, subject-level analytics, and richer BORIS-inspired interoperability."
+msgid ""
+"Version 0.8 adds subject groups, observation templates, review workflow, "
+"audit trail, subject-level analytics, and richer BORIS-inspired "
+"interoperability."
 msgstr "0.8 版本新增了对象组、观察模板、审核工作流、审计跟踪、对象级分析以及更丰富的 BORIS 风格互操作性。"
 
 msgid "Video added."
@@ -951,3 +977,284 @@ msgstr "视频"
 
 msgid "yes"
 msgstr "是"
+
+msgid "A title is required for a live observation session."
+msgstr "实时观察会话必须填写标题。"
+
+msgid "A title is required for a media observation session."
+msgstr "媒体观察会话必须填写标题。"
+
+msgid "Add member"
+msgstr "添加成员"
+
+msgid "Add project member"
+msgstr "添加项目成员"
+
+msgid "Agreement confusion counts"
+msgstr "一致性混淆计数"
+
+msgid "Behavior lanes with clickable points and state intervals."
+msgstr "带有可点击点事件和状态区间的行为轨道。"
+
+msgid "Bucket size"
+msgstr "时间桶大小"
+
+msgid "Buckets compared"
+msgstr "比较的时间桶数"
+
+msgid "Cohen kappa"
+msgstr "Cohen Kappa 系数"
+
+msgid "Compare"
+msgstr "比较"
+
+msgid "Comparison label"
+msgstr "比较标签"
+
+msgid "Comparison session"
+msgstr "比较会话"
+
+msgid "Create keyboard profile"
+msgstr "创建键盘配置"
+
+msgid "Create membership"
+msgstr "创建成员关系"
+
+msgid "Create profile"
+msgstr "创建配置"
+
+msgid "Create profile from current bindings"
+msgstr "根据当前快捷键创建配置"
+
+msgid "Edit membership"
+msgstr "编辑成员关系"
+
+msgid "Editor"
+msgstr "编辑者"
+
+msgid "Export BORIS project"
+msgstr "导出 BORIS 项目"
+
+msgid ""
+"Import complete. Imported events: %(events)s. Imported annotations: "
+"%(annotations)s."
+msgstr "导入完成。已导入事件：%(events)s。已导入注释：%(annotations)s。"
+
+msgid ""
+"Import complete. New categories: %(categories)s, modifiers: %(modifiers)s, "
+"behaviors: %(behaviors)s."
+msgstr "导入完成。新增类别：%(categories)s，修饰符：%(modifiers)s，行为：%(behaviors)s。"
+
+msgid "Inter-observer agreement"
+msgstr "观察者间一致性"
+
+msgid "Keyboard profile"
+msgstr "键盘配置"
+
+msgid "Keyboard profile created from the current project bindings."
+msgstr "已根据当前项目快捷键创建键盘配置。"
+
+msgid "Keyboard profile deleted."
+msgstr "键盘配置已删除。"
+
+msgid "Keyboard profile refreshed from the current project bindings."
+msgstr "已根据当前项目快捷键刷新键盘配置。"
+
+msgid "Keyboard profiles"
+msgstr "键盘配置"
+
+msgid ""
+"Manage the project metadata, explicit team roles, and reusable keyboard "
+"profiles."
+msgstr "管理项目元数据、明确的团队角色以及可复用的键盘配置。"
+
+msgid "No additional members yet."
+msgstr "暂无其他成员。"
+
+msgid "No agreement rows yet."
+msgstr "暂无一致性结果。"
+
+msgid "No description yet."
+msgstr "暂无描述。"
+
+msgid "No keyboard profiles yet."
+msgstr "暂无键盘配置。"
+
+msgid "Only editors or the assigned observer can delete the session."
+msgstr "只有编辑者或指定观察者可以删除该会话。"
+
+msgid "Pause timer"
+msgstr "暂停计时器"
+
+msgid "Percent agreement"
+msgstr "一致率"
+
+msgid "Project defaults"
+msgstr "项目默认值"
+
+msgid "Project membership added."
+msgstr "已添加项目成员关系。"
+
+msgid "Project membership deleted."
+msgstr "已删除项目成员关系。"
+
+msgid "Project membership updated."
+msgstr "已更新项目成员关系。"
+
+msgid "Project roles"
+msgstr "项目角色"
+
+msgid ""
+"Project-wide analytics with behavior totals, subject breakdowns, transition "
+"counts, inter-observer agreement, and consolidated exports."
+msgstr "项目级分析包括行为总量、主体分解、转移计数、观察者间一致性和合并导出。"
+
+msgid "Reference label"
+msgstr "参考标签"
+
+msgid "Reference session"
+msgstr "参考会话"
+
+msgid "Refresh metadata"
+msgstr "刷新元数据"
+
+msgid "Reproducibility bundle"
+msgstr "可复现实验包"
+
+msgid "Reset timer"
+msgstr "重置计时器"
+
+msgid "Reviewer"
+msgstr "审阅者"
+
+msgid "Role"
+msgstr "角色"
+
+msgid "Select a session"
+msgstr "选择会话"
+
+msgid "Select two sessions from the same project to compute agreement."
+msgstr "请选择同一项目中的两个会话以计算一致性。"
+
+msgid "Set as default profile"
+msgstr "设为默认配置"
+
+msgid "Start timer"
+msgstr "开始计时"
+
+msgid "Team and reproducibility"
+msgstr "团队与可复现性"
+
+msgid ""
+"The profile is generated from the current behavior, modifier, and subject "
+"bindings defined for this project."
+msgstr "该配置根据此项目当前定义的行为、修饰符和主体快捷键生成。"
+
+msgid ""
+"This project now tracks explicit roles, reusable keyboard profiles, and a "
+"reproducibility export bundle for scientific archiving."
+msgstr "该项目现已支持明确的角色、可复用的键盘配置以及用于科学归档的可复现实验导出包。"
+
+msgid "Unsupported session payload format."
+msgstr "不支持的会话载荷格式。"
+
+msgid "Update keyboard profile"
+msgstr "更新键盘配置"
+
+msgid "Update membership"
+msgstr "更新成员关系"
+
+msgid "Update profile"
+msgstr "更新配置"
+
+msgid "User"
+msgstr "用户"
+
+msgid ""
+"Version 0.8.3 adds role-based collaboration, keyboard profiles, agreement "
+"analytics, reproducibility bundles, and expanded scientific translations."
+msgstr "0.8.3 版本新增基于角色的协作、键盘配置、一致性分析、可复现实验包以及扩展的科学术语翻译。"
+
+msgid "Viewer"
+msgstr "查看者"
+
+msgid "You need editor permissions for this project."
+msgstr "你需要拥有该项目的编辑权限。"
+
+msgid "You need editor permissions to create sessions."
+msgstr "你需要拥有编辑权限才能创建会话。"
+
+msgid "You need editor permissions to delete independent variables."
+msgstr "你需要拥有编辑权限才能删除独立变量。"
+
+msgid "You need editor permissions to delete observation templates."
+msgstr "你需要拥有编辑权限才能删除观察模板。"
+
+msgid "You need editor permissions to delete subject groups."
+msgstr "你需要拥有编辑权限才能删除主体组。"
+
+msgid "You need editor permissions to delete subjects."
+msgstr "你需要拥有编辑权限才能删除主体。"
+
+msgid "You need editor permissions to edit independent variables."
+msgstr "你需要拥有编辑权限才能编辑独立变量。"
+
+msgid "You need editor permissions to edit observation templates."
+msgstr "你需要拥有编辑权限才能编辑观察模板。"
+
+msgid "You need editor permissions to edit subject groups."
+msgstr "你需要拥有编辑权限才能编辑主体组。"
+
+msgid "You need editor permissions to edit subjects."
+msgstr "你需要拥有编辑权限才能编辑主体。"
+
+msgid "You need editor permissions to manage behaviors."
+msgstr "你需要拥有编辑权限才能管理行为。"
+
+msgid "You need editor permissions to manage categories."
+msgstr "你需要拥有编辑权限才能管理类别。"
+
+msgid "You need editor permissions to manage modifiers."
+msgstr "你需要拥有编辑权限才能管理修饰符。"
+
+msgid "You need editor permissions to manage videos."
+msgstr "你需要拥有编辑权限才能管理视频。"
+
+msgid "You need editor permissions to modify this session."
+msgstr "你需要拥有编辑权限才能修改此会话。"
+
+msgid "You need editor permissions to submit a session for review."
+msgstr "你需要拥有编辑权限才能提交会话进行审阅。"
+
+msgid "You need editor permissions to update sessions."
+msgstr "你需要拥有编辑权限才能更新会话。"
+
+msgid "You need reviewer permissions for this project."
+msgstr "你需要拥有该项目的审阅权限。"
+
+msgid "You need reviewer permissions to change workflow status."
+msgstr "你需要拥有审阅权限才能更改工作流状态。"
+
+msgid "You need reviewer permissions to create annotations."
+msgstr "你需要拥有审阅权限才能创建注释。"
+
+msgid "You need reviewer permissions to update annotations."
+msgstr "你需要拥有审阅权限才能更新注释。"
+
+msgid "Your role"
+msgstr "你的角色"
+
+msgid "Zoom"
+msgstr "缩放"
+
+msgid "default"
+msgstr "默认"
+
+msgid "not set"
+msgstr "未设置"
+
+msgid "read only"
+msgstr "只读"
+
+msgid "viewer"
+msgstr "查看者"
