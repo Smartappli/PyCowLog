@@ -313,6 +313,8 @@
                     <button type="button" id="event-editor-plus-second" class="secondary">+1 s</button>
                     <button type="button" id="event-editor-undo" class="secondary">{% trans 'Undo edit' %}</button>
                     <button type="button" id="event-editor-redo" class="secondary">{% trans 'Redo edit' %}</button>
+                    <button type="button" id="server-undo-btn" class="secondary">{% trans 'Undo server change' %}</button>
+                    <button type="button" id="server-redo-btn" class="secondary">{% trans 'Redo server change' %}</button>
                     <button type="button" id="event-editor-apply" class="secondary">{% trans 'Save event' %}</button>
                     <button type="button" id="event-editor-duplicate" class="secondary">{% trans 'Duplicate event' %}</button>
                     <button type="button" id="event-editor-clear" class="secondary">{% trans 'Clear selection' %}</button>
@@ -403,6 +405,8 @@ const eventEditorUndoBtn = document.getElementById('event-editor-undo');
 const eventEditorRedoBtn = document.getElementById('event-editor-redo');
 const reviewNotesAutosaveStatus = document.getElementById('review-notes-autosave-status');
 const refreshMediaAnalysisBtn = document.getElementById('refresh-media-analysis-btn');
+const serverUndoBtn = document.getElementById('server-undo-btn');
+const serverRedoBtn = document.getElementById('server-redo-btn');
 const mediaAnalysisOutput = document.getElementById('media-analysis-output');
 
 function getCookie(name) {
@@ -701,6 +705,7 @@ function renderMediaAnalysis() {
                 <span>${jsI18n.fileExists}: ${item.file_exists ? jsI18n.yes : jsI18n.no}</span>
             </div>
             <p class="muted">${jsI18n.relativePath}: ${item.relative_path || '—'}</p>
+            ${item.image_sequence?.available ? `<p class="muted">Image sequence: ${item.image_sequence.sequence_count} files · ${item.image_sequence.relative_directory}</p><p class="muted">${(item.image_sequence.preview_files || []).join(', ')}</p>` : ''}
             ${item.waveform?.length ? `<div><strong>${jsI18n.waveform}</strong>${renderMiniBars(item.waveform, 'waveform-bars')}</div>` : ''}
             ${item.spectrogram?.length ? `<div><strong>${jsI18n.spectrogram}</strong>${renderSpectrogramGrid(item.spectrogram)}</div>` : ''}
         </article>
@@ -1030,6 +1035,16 @@ async function sendJSON(url, payload) {
     return data;
 }
 
+async function undoServerChange() {
+    await sendJSON(`{% url 'tracker:session_undo_api' session.pk %}`, {});
+    await fetchSessionState();
+}
+
+async function redoServerChange() {
+    await sendJSON(`{% url 'tracker:session_redo_api' session.pk %}`, {});
+    await fetchSessionState();
+}
+
 async function createEventForButton(button, explicitKind = null) {
     if (!canCodeSession) return;
     const payload = {
@@ -1142,6 +1157,8 @@ eventEditorDuplicateBtn?.addEventListener('click', async () => { try { await dup
 eventEditorClearBtn?.addEventListener('click', clearEventEditor);
 eventEditorUndoBtn?.addEventListener('click', undoEventEditor);
 eventEditorRedoBtn?.addEventListener('click', redoEventEditor);
+serverUndoBtn?.addEventListener('click', async () => { try { await undoServerChange(); } catch (error) { alert(error.message); } });
+serverRedoBtn?.addEventListener('click', async () => { try { await redoServerChange(); } catch (error) { alert(error.message); } });
 eventEditorMinusSecondBtn?.addEventListener('click', () => nudgeSelectedEvent(-1));
 eventEditorMinusFrameBtn?.addEventListener('click', () => nudgeSelectedEvent(-frameStep));
 eventEditorPlusFrameBtn?.addEventListener('click', () => nudgeSelectedEvent(frameStep));

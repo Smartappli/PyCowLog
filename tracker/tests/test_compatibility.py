@@ -77,6 +77,49 @@ class CompatibilityTests(TestCase):
         self.assertEqual(event.behavior.name, 'Eat')
         self.assertEqual(event.modifiers_display, 'Near')
 
+
+    def test_load_session_import_payload_supports_state_intervals_from_tabular_rows(self):
+        upload = SimpleUploadedFile(
+            'boris_rows.csv',
+            b'time,stop,behavior,subject,modifier,comment\n1.0,3.0,Stand,Cow 1,Near,Frame A\n',
+            content_type='text/csv',
+        )
+        payload, report = load_session_import_payload(upload, self.session)
+        self.assertEqual(report['detected_format'], 'boris-tabular-csv-v1')
+        self.assertEqual(len(payload['events']), 2)
+        self.assertEqual(payload['events'][0]['event_kind'], 'start')
+        self.assertEqual(payload['events'][1]['event_kind'], 'stop')
+
+    def test_session_undo_and_redo_endpoints_restore_event_state(self):
+        response = self.client.post(
+            reverse('tracker:event_create_api', args=[self.session.pk]),
+            data=json.dumps(
+                {
+                    'behavior_id': self.point_behavior.pk,
+                    'timestamp_seconds': '1.000',
+                    'modifier_ids': [self.modifier.pk],
+                    'subject_ids': [self.subject.pk],
+                }
+            ),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.session.events.count(), 1)
+        undo_response = self.client.post(
+            reverse('tracker:session_undo_api', args=[self.session.pk]),
+            data='{}',
+            content_type='application/json',
+        )
+        self.assertEqual(undo_response.status_code, 200)
+        self.assertEqual(self.session.events.count(), 0)
+        redo_response = self.client.post(
+            reverse('tracker:session_redo_api', args=[self.session.pk]),
+            data='{}',
+            content_type='application/json',
+        )
+        self.assertEqual(redo_response.status_code, 200)
+        self.assertEqual(self.session.events.count(), 1)
+
     def test_behavioral_sequences_and_textgrid_exports(self):
         point_event = ObservationEvent.objects.create(
             session=self.session,
@@ -159,4 +202,4 @@ class CompatibilityTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content.decode('utf-8'))
-        self.assertEqual(payload['schema'], 'pybehaviorlog-0.8.8-session-compatibility-report')
+        self.assertEqual(payload['schema'], 'pybehaviorlog-0.8.9-session-compatibility-report')

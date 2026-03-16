@@ -356,6 +356,42 @@ def _wav_visual_summary(file_path: Path, *, points: int = 96, spectrogram_column
     }
 
 
+def _image_sequence_summary(file_path: Path | None, *, limit: int = 12) -> dict:
+    """Describe a likely image sequence around a local image file."""
+    if file_path is None or not file_path.exists() or not file_path.is_file():
+        return {'available': False, 'reason': 'missing'}
+    suffix = file_path.suffix.lower()
+    if suffix not in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tif', '.tiff'}:
+        return {'available': False, 'reason': 'not-image'}
+    parent = file_path.parent
+    stem = file_path.stem
+    prefix = re.sub(r'\d+$', '', stem)
+    pattern = re.compile(rf'^{re.escape(prefix)}\d*{re.escape(suffix)}$', re.IGNORECASE) if prefix else None
+    siblings = []
+    for candidate in sorted(parent.iterdir()):
+        if not candidate.is_file():
+            continue
+        if candidate.suffix.lower() != suffix:
+            continue
+        if pattern is not None and not pattern.match(candidate.name):
+            continue
+        siblings.append(candidate.name)
+    if file_path.name not in siblings:
+        siblings.insert(0, file_path.name)
+    index = siblings.index(file_path.name) if file_path.name in siblings else 0
+    start = max(index - limit // 2, 0)
+    end = min(start + limit, len(siblings))
+    preview = siblings[start:end]
+    return {
+        'available': True,
+        'directory': str(parent),
+        'relative_directory': parent.name,
+        'sequence_count': len(siblings),
+        'current_index': index,
+        'preview_files': preview,
+    }
+
+
 def build_media_analysis(session: ObservationSession) -> list[dict]:
     """Return media diagnostics for synced sources, including relative paths and audio summaries."""
     rows: list[dict] = []
@@ -372,14 +408,142 @@ def build_media_analysis(session: ObservationSession) -> list[dict]:
             'waveform': [],
             'spectrogram': [],
             'audio_summary': {'available': False, 'reason': 'not-audio'},
+            'image_sequence': {'available': False, 'reason': 'not-image'},
         }
         if item['media_kind'] == 'audio' and storage_path and storage_path.exists() and storage_path.suffix.lower() == '.wav':
             audio_summary = _wav_visual_summary(storage_path)
             item['audio_summary'] = audio_summary
             item['waveform'] = audio_summary.get('waveform', [])
             item['spectrogram'] = audio_summary.get('spectrogram', [])
+        if item['media_kind'] == 'image':
+            item['image_sequence'] = _image_sequence_summary(storage_path)
         rows.append(item)
     return rows
+
+
+def _server_history_key(session_id: int) -> str:
+    return f'pybehaviorlog_history_{session_id}'
+
+
+def _history_event_payload(payload: dict | None) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    if isinstance(payload.get('event'), dict):
+        return payload['event']
+    if 'behavior' in payload and 'timestamp_seconds' in payload:
+        return payload
+    return None
+
+
+def _push_server_history(request, session_id: int, entry: dict) -> None:
+    key = _server_history_key(session_id)
+    stacks = request.session.get(key, {'undo': [], 'redo': []})
+    undo_stack = list(stacks.get('undo', []))
+    undo_stack.append(entry)
+    stacks['undo'] = undo_stack[-50:]
+    stacks['redo'] = []
+    request.session[key] = stacks
+    request.session.modified = True
+
+
+def _pop_server_history(request, session_id: int, stack_name: str) -> dict | None:
+    key = _server_history_key(session_id)
+    stacks = request.session.get(key, {'undo': [], 'redo': []})
+    stack = list(stacks.get(stack_name, []))
+    if not stack:
+        return None
+    entry = stack.pop()
+    stacks[stack_name] = stack
+    request.session[key] = stacks
+    request.session.modified = True
+    return entry
+
+
+def _push_redo_history(request, session_id: int, entry: dict) -> None:
+    key = _server_history_key(session_id)
+    stacks = request.session.get(key, {'undo': [], 'redo': []})
+    redo_stack = list(stacks.get('redo', []))
+    redo_stack.append(entry)
+    stacks['redo'] = redo_stack[-50:]
+    request.session[key] = stacks
+    request.session.modified = True
+
+
+def _restore_history_entry(request, session_id: int, entry: dict, *, to_stack: str) -> None:
+    key = _server_history_key(session_id)
+    stacks = request.session.get(key, {'undo': [], 'redo': []})
+    target_stack = list(stacks.get(to_stack, []))
+    target_stack.append(entry)
+    stacks[to_stack] = target_stack[-50:]
+    request.session[key] = stacks
+    request.session.modified = True
+
+
+def _create_event_from_snapshot(session: ObservationSession, snapshot: dict) -> ObservationEvent:
+    behavior = get_object_or_404(Behavior, project=session.project, pk=snapshot.get('behavior_id'))
+    event = ObservationEvent.objects.create(
+        session=session,
+        behavior=behavior,
+        event_kind=snapshot.get('event_kind') or ObservationEvent.KIND_POINT,
+        timestamp_seconds=_decimal(snapshot.get('timestamp_seconds'), default='0'),
+        frame_index=snapshot.get('frame_index') or None,
+        comment=(snapshot.get('comment') or '').strip(),
+        subject_id=snapshot.get('subject_id') or None,
+    )
+    modifier_ids = [int(item['id']) for item in snapshot.get('modifiers', []) if isinstance(item, dict) and item.get('id')]
+    subject_ids = [int(item['id']) for item in snapshot.get('subjects', []) if isinstance(item, dict) and item.get('id')]
+    if modifier_ids:
+        event.modifiers.set(Modifier.objects.filter(project=session.project, pk__in=modifier_ids))
+    if subject_ids:
+        subjects = list(Subject.objects.filter(project=session.project, pk__in=subject_ids))
+        event.subjects.set(subjects)
+        if not event.subject_id and subjects:
+            event.subject = subjects[0]
+            event.save(update_fields=['subject'])
+    return event
+
+
+def _apply_history_entry(session: ObservationSession, entry: dict, *, direction: str) -> str:
+    action = entry.get('action')
+    before = _history_event_payload(entry.get('before'))
+    after = _history_event_payload(entry.get('after'))
+    if action == ObservationAuditLog.ACTION_CREATE:
+        if direction == 'undo' and after:
+            ObservationEvent.objects.filter(session=session, pk=after.get('id')).delete()
+            return 'create'
+        if direction == 'redo' and after:
+            recreated = _create_event_from_snapshot(session, after)
+            after['id'] = recreated.id
+            return 'create'
+    if action == ObservationAuditLog.ACTION_DELETE:
+        if direction == 'undo' and before:
+            recreated = _create_event_from_snapshot(session, before)
+            before['id'] = recreated.id
+            return 'delete'
+        if direction == 'redo' and before:
+            ObservationEvent.objects.filter(session=session, pk=before.get('id')).delete()
+            return 'delete'
+    if action == ObservationAuditLog.ACTION_UPDATE and before and after:
+        snapshot = before if direction == 'undo' else after
+        event = get_object_or_404(ObservationEvent, session=session, pk=(after.get('id') or before.get('id')) )
+        behavior = get_object_or_404(Behavior, project=session.project, pk=snapshot.get('behavior_id'))
+        event.behavior = behavior
+        event.event_kind = snapshot.get('event_kind') or event.event_kind
+        event.timestamp_seconds = _decimal(snapshot.get('timestamp_seconds'), default='0')
+        event.frame_index = snapshot.get('frame_index') or None
+        event.comment = (snapshot.get('comment') or '').strip()
+        event.subject_id = snapshot.get('subject_id') or None
+        event.save(update_fields=['behavior', 'event_kind', 'timestamp_seconds', 'frame_index', 'comment', 'subject'])
+        modifier_ids = [int(item['id']) for item in snapshot.get('modifiers', []) if isinstance(item, dict) and item.get('id')]
+        subject_ids = [int(item['id']) for item in snapshot.get('subjects', []) if isinstance(item, dict) and item.get('id')]
+        event.modifiers.set(Modifier.objects.filter(project=session.project, pk__in=modifier_ids))
+        subjects = list(Subject.objects.filter(project=session.project, pk__in=subject_ids))
+        event.subjects.set(subjects)
+        if not event.subject_id and subjects:
+            event.subject = subjects[0]
+            event.save(update_fields=['subject'])
+        return 'update'
+    raise ValueError(_('No undo or redo information is available for this operation.'))
 
 def serialize_event(event: ObservationEvent) -> dict:
     modifiers = list(
@@ -1142,8 +1306,8 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         })
 
     manifest = {
-        'schema': 'pybehaviorlog-0.8.8-bundle',
-        'version': '0.8.8',
+        'schema': 'pybehaviorlog-0.8.9-bundle',
+        'version': '0.8.9',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1481,6 +1645,7 @@ def parse_tabular_session_rows(
     modifier_lookup = _token_lookup_map(session.project.modifiers.all())
     warnings: list[str] = []
     events: list[dict] = []
+    annotations: list[dict] = []
     line_count = 0
     for index, raw_row in enumerate(rows, start=2):
         row = {_normalize_import_header(key): value for key, value in raw_row.items()}
@@ -1489,13 +1654,33 @@ def parse_tabular_session_rows(
             or row.get('timestamp_seconds')
             or row.get('timestamp')
             or row.get('start')
+            or row.get('start_time')
+            or row.get('elapsed_time')
+            or row.get('media_time')
         )
+        stop_token = row.get('stop') or row.get('end') or row.get('stop_time') or row.get('end_time')
         behavior_token = (
             row.get('behavior')
             or row.get('code')
             or row.get('behavior_code')
             or row.get('event')
+            or row.get('behavior_name')
         )
+        note_token = row.get('annotation') or row.get('note') or row.get('text')
+        if behavior_token in {None, ''} and note_token not in {None, ''} and time_token not in {None, ''}:
+            try:
+                note_time = float(str(time_token).replace(',', '.'))
+            except ValueError:
+                continue
+            annotations.append(
+                {
+                    'time': note_time,
+                    'title': str(row.get('title') or 'Imported note'),
+                    'note': str(note_token),
+                    'color': '#f59e0b',
+                }
+            )
+            continue
         if time_token in {None, ''} or behavior_token in {None, ''}:
             continue
         try:
@@ -1506,6 +1691,12 @@ def parse_tabular_session_rows(
                 % {'row': index, 'value': time_token}
             )
             continue
+        stop_seconds = None
+        if stop_token not in {None, ''}:
+            try:
+                stop_seconds = float(str(stop_token).replace(',', '.'))
+            except ValueError:
+                stop_seconds = None
         behavior = behavior_lookup.get(str(behavior_token).casefold())
         if behavior is None:
             warnings.append(
@@ -1514,40 +1705,74 @@ def parse_tabular_session_rows(
             )
             continue
         line_count += 1
-        event_kind = _resolve_event_kind_token(
-            str(row.get('event_kind') or row.get('type') or row.get('kind') or '')
-        ) or (ObservationEvent.KIND_POINT if behavior.mode == Behavior.MODE_POINT else ObservationEvent.KIND_START)
-        modifiers = _coerce_name_list(row.get('modifiers') or row.get('modifier'))
+        explicit_kind = _resolve_event_kind_token(
+            str(
+                row.get('event_kind')
+                or row.get('type')
+                or row.get('kind')
+                or row.get('status')
+                or row.get('behavior_type')
+                or ''
+            )
+        )
+        if behavior.mode == Behavior.MODE_POINT:
+            event_kind = ObservationEvent.KIND_POINT
+        else:
+            event_kind = explicit_kind or ObservationEvent.KIND_START
+        modifier_tokens = []
+        for key, value in row.items():
+            if key.startswith('modifier') and value not in {None, ''}:
+                modifier_tokens.extend(_coerce_name_list(value))
+        modifier_tokens.extend(_coerce_name_list(row.get('modifiers') or row.get('modifier')))
         normalized_modifiers = []
-        for token in modifiers:
+        for token in modifier_tokens:
             modifier = modifier_lookup.get(str(token).casefold())
             normalized_modifiers.append(modifier.name if modifier is not None else str(token))
-        subjects = _coerce_name_list(row.get('subjects') or row.get('subject'))
-        frame_index = row.get('frame_index') or row.get('frame') or None
+        subject_tokens = []
+        for key, value in row.items():
+            if key.startswith('subject') and value not in {None, ''}:
+                subject_tokens.extend(_coerce_name_list(value))
+        if row.get('subject_name') not in {None, ''}:
+            subject_tokens.extend(_coerce_name_list(row.get('subject_name')))
+        subjects = list(dict.fromkeys(subject_tokens))
+        frame_index = row.get('frame_index') or row.get('frame') or row.get('frame_number') or None
         try:
             frame_index = int(frame_index) if frame_index not in {None, ''} else None
         except (TypeError, ValueError):
             frame_index = None
-        events.append(
-            {
-                'time': timestamp,
-                'behavior': behavior.name,
-                'event_kind': event_kind,
-                'modifiers': normalized_modifiers,
-                'subjects': subjects,
-                'comment': str(row.get('comment') or ''),
-                'frame_index': frame_index,
-            }
+        comment = str(
+            row.get('comment')
+            or row.get('remarks')
+            or row.get('remark')
+            or row.get('details')
+            or row.get('image_path')
+            or row.get('frame_file')
+            or ''
         )
+        base_event = {
+            'time': timestamp,
+            'behavior': behavior.name,
+            'event_kind': event_kind,
+            'modifiers': list(dict.fromkeys(normalized_modifiers)),
+            'subjects': subjects,
+            'comment': comment,
+            'frame_index': frame_index,
+        }
+        if behavior.mode == Behavior.MODE_STATE and stop_seconds is not None and stop_seconds >= timestamp:
+            events.append(base_event | {'event_kind': ObservationEvent.KIND_START})
+            events.append(base_event | {'time': stop_seconds, 'event_kind': ObservationEvent.KIND_STOP})
+        else:
+            events.append(base_event)
     payload = {
         'schema': source_format,
         'events': events,
-        'annotations': [],
+        'annotations': annotations,
     }
     report = {
         'detected_format': source_format,
         'line_count': line_count,
         'event_count': len(events),
+        'annotation_count': len(annotations),
         'warnings': warnings,
     }
     return payload, report
@@ -1636,8 +1861,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
     modifier_event_count = sum(1 for event in ordered_events if event.modifiers.exists())
     multi_subject_event_count = sum(1 for event in ordered_events if event.subjects.count() > 1)
     report = {
-        'schema': 'pybehaviorlog-0.8.8-session-compatibility-report',
-        'version': '0.8.8',
+        'schema': 'pybehaviorlog-0.8.9-session-compatibility-report',
+        'version': '0.8.9',
         'session': session.title,
         'boris': {
             'documented_exports': [
@@ -1672,7 +1897,7 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
         'certification': {
             'roundtrip_tested_families': ['boris_observation_json', 'cowlog_plain_text_results'],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.8.8',
+            'fixture_version': '0.8.9',
         },
     }
     if state_event_count:
@@ -1690,8 +1915,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
 def build_project_compatibility_report(project: Project) -> dict:
     """Summarize project-level exchange coverage for BORIS and CowLog."""
     return {
-        'schema': 'pybehaviorlog-0.8.8-project-compatibility-report',
-        'version': '0.8.8',
+        'schema': 'pybehaviorlog-0.8.9-project-compatibility-report',
+        'version': '0.8.9',
         'project': project.name,
         'counts': {
             'sessions': project.sessions.count(),
@@ -1722,7 +1947,7 @@ def build_project_compatibility_report(project: Project) -> dict:
         'certification': {
             'roundtrip_tested_families': ['boris_project_json', 'boris_observation_json', 'cowlog_plain_text_results'],
             'certified_against_built_in_corpus': True,
-            'fixture_version': '0.8.8',
+            'fixture_version': '0.8.9',
         },
         'sample_session_reports': [
             build_session_compatibility_report(session)
@@ -1836,7 +2061,7 @@ def _resolve_event_kind_token(value: str | None) -> str | None:
 
 def _extract_media_labels(item: dict) -> list[str]:
     labels = []
-    for key in ('synced_videos', 'media_files', 'media', 'media_paths'):
+    for key in ('synced_videos', 'media_files', 'media', 'media_paths', 'image_paths', 'pictures', 'frames'):
         labels.extend(_coerce_name_list(item.get(key)))
     primary = item.get('primary_video') or item.get('media_file') or item.get('media_path')
     if primary:
@@ -1899,7 +2124,7 @@ def import_project_payload(
         'boris-project-v2',
         'boris-project-v3',
         'pybehaviorlog-0.8.3-bundle',
-        'pybehaviorlog-0.8.8-bundle',
+        'pybehaviorlog-0.8.9-bundle',
     }:
         raise ValueError(_('Unsupported project payload format.'))
 
@@ -1908,7 +2133,7 @@ def import_project_payload(
         project,
         {
             **ethogram_payload,
-            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.8-ethogram'),
+            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.9-ethogram'),
         },
         replace_existing=False,
     )
@@ -2110,7 +2335,7 @@ def import_project_payload(
 
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.8.8-ethogram',
+        'schema': 'pybehaviorlog-0.8.9-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -2191,7 +2416,7 @@ def import_ethogram_payload(
         'cowlog-django-v5-ethogram',
         'pybehaviorlog-0.8-ethogram',
         'pybehaviorlog-0.8.3-ethogram',
-        'pybehaviorlog-0.8.8-ethogram',
+        'pybehaviorlog-0.8.9-ethogram',
         'boris-project-v1',
         'boris-project-v2',
         'boris-project-v3',
@@ -2410,6 +2635,13 @@ def _autosize_workbook(workbook: Workbook):  # pragma: no cover
 
 def build_boris_like_payload(session: ObservationSession) -> dict:  # pragma: no cover
     primary_video = session.all_videos_ordered[0] if session.all_videos_ordered else None
+    media_paths = [_relative_media_path(video) for video in session.all_videos_ordered if _relative_media_path(video)]
+    image_paths = [path for path in media_paths if _media_kind_from_name(path) == 'image']
+    picture_directory = None
+    if image_paths:
+        parents = {str(Path(path).parent).replace('\\', '/') for path in image_paths}
+        if len(parents) == 1:
+            picture_directory = next(iter(parents))
     return {
         'schema': 'boris-observation-v3',
         'project_name': session.project.name,
@@ -2423,7 +2655,9 @@ def build_boris_like_payload(session: ObservationSession) -> dict:  # pragma: no
                 'primary_video': session.primary_label,
                 'primary_media_path': _relative_media_path(primary_video),
                 'synced_videos': [video.title for video in session.all_videos_ordered],
-                'media_paths': [_relative_media_path(video) for video in session.all_videos_ordered if _relative_media_path(video)],
+                'media_paths': media_paths,
+                'image_paths': image_paths,
+                'picture_directory': picture_directory,
                 'observer': session.observer.username if session.observer else None,
                 'events': [
                     {
@@ -2469,7 +2703,7 @@ def import_session_payload(
         'pybehaviorlog-v6-session',
         'pybehaviorlog-0.8-session',
         'pybehaviorlog-0.8.3-session',
-        'pybehaviorlog-0.8.8-session',
+        'pybehaviorlog-0.8.9-session',
         'cowlog-results-v1',
         'boris-tabular-csv-v1',
         'boris-tabular-tsv-v1',
@@ -3878,6 +4112,12 @@ def event_create_api(request, pk: int):
         event.modifiers.set(modifiers)
     if subjects:
         event.subjects.set(subjects)
+    event_snapshot = serialize_event(event)
+    _push_server_history(
+        request,
+        session.id,
+        {'target': 'event', 'action': ObservationAuditLog.ACTION_CREATE, 'after': event_snapshot},
+    )
     _log_audit(
         session,
         actor=request.user,
@@ -3885,7 +4125,7 @@ def event_create_api(request, pk: int):
         target_type=ObservationAuditLog.TARGET_EVENT,
         target_id=event.id,
         summary=f'Created event {event.behavior.name} at {event.timestamp_seconds}s.',
-        payload=serialize_event(event),
+        payload={'event': event_snapshot},
     )
     return JsonResponse(
         {'event': serialize_event(event), 'state_status': compute_state_status(session)}, status=201
@@ -3945,6 +4185,7 @@ def event_update_api(request, pk: int):
     elif explicit_kind not in {ObservationEvent.KIND_START, ObservationEvent.KIND_STOP}:
         return JsonResponse({'error': _('Invalid event_kind for a state behavior.')}, status=400)
 
+    before_snapshot = serialize_event(event)
     event.behavior = behavior
     event.event_kind = explicit_kind
     event.timestamp_seconds = timestamp_seconds
@@ -3963,6 +4204,17 @@ def event_update_api(request, pk: int):
     )
     event.modifiers.set(modifiers)
     event.subjects.set(subjects)
+    after_snapshot = serialize_event(event)
+    _push_server_history(
+        request,
+        session.id,
+        {
+            'target': 'event',
+            'action': ObservationAuditLog.ACTION_UPDATE,
+            'before': before_snapshot,
+            'after': after_snapshot,
+        },
+    )
     _log_audit(
         session,
         actor=request.user,
@@ -3970,7 +4222,7 @@ def event_update_api(request, pk: int):
         target_type=ObservationAuditLog.TARGET_EVENT,
         target_id=event.id,
         summary=f'Updated event {event.behavior.name} at {event.timestamp_seconds}s.',
-        payload=serialize_event(event),
+        payload={'before': before_snapshot, 'after': after_snapshot},
     )
     return JsonResponse(
         {'event': serialize_event(event), 'state_status': compute_state_status(session)}
@@ -3989,6 +4241,11 @@ def event_delete_api(request, pk: int):
     _require_editable_session(session, request.user)
     payload = serialize_event(event)
     event.delete()
+    _push_server_history(
+        request,
+        session.id,
+        {'target': 'event', 'action': ObservationAuditLog.ACTION_DELETE, 'before': payload},
+    )
     _log_audit(
         session,
         actor=request.user,
@@ -3996,9 +4253,59 @@ def event_delete_api(request, pk: int):
         target_type=ObservationAuditLog.TARGET_EVENT,
         target_id=payload['id'],
         summary=f'Deleted event {payload["behavior"]} at {payload["timestamp_seconds"]}s.',
-        payload=payload,
+        payload={'event': payload},
     )
     return JsonResponse({'ok': True, 'state_status': compute_state_status(session)})
+
+
+@login_required
+@require_POST
+def session_undo_api(request, pk: int):
+    session = get_accessible_session(request.user, pk)
+    _require_editable_session(session, request.user)
+    entry = _pop_server_history(request, session.id, 'undo')
+    if entry is None:
+        return JsonResponse({'error': _('Nothing to undo.')}, status=400)
+    try:
+        applied_action = _apply_history_entry(session, entry, direction='undo')
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    _push_redo_history(request, session.id, entry)
+    _log_audit(
+        session,
+        actor=request.user,
+        action=ObservationAuditLog.ACTION_UPDATE,
+        target_type=ObservationAuditLog.TARGET_SESSION,
+        target_id=session.id,
+        summary=f'Undo {applied_action} operation.',
+        payload={'history_action': applied_action, 'direction': 'undo'},
+    )
+    return JsonResponse({'ok': True, 'history_action': applied_action, 'state_status': compute_state_status(session)})
+
+
+@login_required
+@require_POST
+def session_redo_api(request, pk: int):
+    session = get_accessible_session(request.user, pk)
+    _require_editable_session(session, request.user)
+    entry = _pop_server_history(request, session.id, 'redo')
+    if entry is None:
+        return JsonResponse({'error': _('Nothing to redo.')}, status=400)
+    try:
+        applied_action = _apply_history_entry(session, entry, direction='redo')
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    _restore_history_entry(request, session.id, entry, to_stack='undo')
+    _log_audit(
+        session,
+        actor=request.user,
+        action=ObservationAuditLog.ACTION_UPDATE,
+        target_type=ObservationAuditLog.TARGET_SESSION,
+        target_id=session.id,
+        summary=f'Redo {applied_action} operation.',
+        payload={'history_action': applied_action, 'direction': 'redo'},
+    )
+    return JsonResponse({'ok': True, 'history_action': applied_action, 'state_status': compute_state_status(session)})
 
 
 @login_required
@@ -4126,7 +4433,7 @@ def session_export_sql(request, pk: int):  # pragma: no cover
     """Export session events as SQL INSERT statements for downstream analysis."""
     session = get_accessible_session(request.user, pk)
     lines = [
-        '-- PyBehaviorLog 0.8.8 SQL export',
+        '-- PyBehaviorLog 0.8.9 SQL export',
         'BEGIN;',
         'CREATE TABLE IF NOT EXISTS pybehaviorlog_event_export (project text, session text, primary_video text, synced_videos text, observer text, category text, behavior text, behavior_mode text, event_kind text, timestamp_seconds numeric(10,3), subjects text, modifiers text, comment text, created_at text);',
     ]
@@ -4162,7 +4469,7 @@ def session_export_cowlog_txt(request, pk: int):  # pragma: no cover
     response['Content-Disposition'] = (
         f'attachment; filename="session_{session.pk}_cowlog_compatible.txt"'
     )
-    response.write('# PyBehaviorLog 0.8.8 CowLog-compatible export\n')
+    response.write('# PyBehaviorLog 0.8.9 CowLog-compatible export\n')
     response.write(f'# session\t{session.title}\n')
     response.write(f'# project\t{session.project.name}\n')
     response.write(f'# primary_video\t{session.primary_label}\n')
@@ -4284,7 +4591,7 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.8.8-session',
+        'schema': 'pybehaviorlog-0.8.9-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,

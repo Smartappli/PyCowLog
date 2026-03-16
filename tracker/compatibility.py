@@ -39,12 +39,13 @@ def _resolve_event_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     schema = payload.get('schema', '')
     if schema in {
         'cowlog-results-v1',
-        'pybehaviorlog-0.8.8-session',
+        'pybehaviorlog-0.8.9-session',
         'pybehaviorlog-0.8.3-session',
         'pybehaviorlog-0.8-session',
         'boris-tabular-csv-v1',
         'boris-tabular-tsv-v1',
         'boris-tabular-xlsx-v1',
+        'boris-tabular-spreadsheet-v2',
     }:
         return [item for item in payload.get('events', []) if isinstance(item, dict)]
     observations = payload.get('observations')
@@ -91,7 +92,8 @@ def normalize_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
                 'event_kind': event_kind,
                 'modifiers': _string_list(item.get('modifiers')),
                 'subjects': _string_list(item.get('subjects') or item.get('subject')),
-                'comment': str(item.get('comment') or item.get('comment_start') or ''),
+                'comment': str(item.get('comment') or item.get('comment_start') or item.get('image_path') or ''),
+                'frame_index': int(item.get('frame_index') or item.get('frame') or 0) if str(item.get('frame_index') or item.get('frame') or '').strip() else None,
             }
         )
     events.sort(key=lambda item: (item['time'], item['behavior'], item['event_kind']))
@@ -112,6 +114,7 @@ def normalize_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
         'events': events,
         'annotations': annotations,
         'variables': {str(key): str(value) for key, value in sorted(variables.items())},
+        'media_paths': sorted(_string_list(payload.get('media_paths') or payload.get('image_paths'))),
     }
 
 
@@ -126,6 +129,8 @@ def compare_session_payloads(expected: dict[str, Any], actual: dict[str, Any]) -
         mismatches.append('annotations')
     if expected_normalized['variables'] != actual_normalized['variables']:
         mismatches.append('variables')
+    if expected_normalized.get('media_paths') != actual_normalized.get('media_paths'):
+        mismatches.append('media_paths')
     return {
         'equivalent': not mismatches,
         'mismatches': mismatches,

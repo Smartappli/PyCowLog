@@ -1,4 +1,4 @@
-# FAO language review package for PyBehaviorLog 0.8.8
+# FAO language review package for PyBehaviorLog 0.8.9
 
 This document is a preparation pack for native review of the six supported FAO languages:
 English, Arabic, Chinese (Simplified), Spanish, French, and Russian.
@@ -6,7 +6,7 @@ English, Arabic, Chinese (Simplified), Spanish, French, and Russian.
 ## Scope
 
 The application already contains translation catalogs for the core user interface.
-Version 0.8.8 adds new user-facing strings in the following areas:
+Version 0.8.9 adds new user-facing strings in the following areas:
 
 - BORIS project import
 - interactive timeline selection
