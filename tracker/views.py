@@ -751,7 +751,7 @@ def build_project_statistics(project: Project) -> dict:
             item['duration_seconds'] += row['total_duration_seconds']
 
     behavior_rows = []
-    for _, item in aggregate.items():
+    for item in aggregate.values():
         item['duration_seconds'] = round(item['duration_seconds'], 3)
         behavior_rows.append(item)
 
@@ -2379,7 +2379,7 @@ def session_workflow_action(request, pk: int):
     try:
         payload = json.loads(request.body.decode('utf-8')) if request.body else request.POST.dict()
     except json.JSONDecodeError as exc:
-        return JsonResponse({'error': f_('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
+        return JsonResponse({'error': _('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
     action = payload.get('action')
     review_notes = (payload.get('review_notes') or session.review_notes or '').strip()
     status_map = {
@@ -2525,7 +2525,7 @@ def event_create_api(request, pk: int):
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
-        return JsonResponse({'error': f_('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
+        return JsonResponse({'error': _('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
 
     behavior = get_object_or_404(Behavior, pk=payload.get('behavior_id'), project=session.project)
     timestamp_seconds = _decimal(payload.get('timestamp_seconds'), default='0')
@@ -2591,7 +2591,7 @@ def event_update_api(request, pk: int):
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
-        return JsonResponse({'error': f_('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
+        return JsonResponse({'error': _('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
 
     behavior = get_object_or_404(
         Behavior, pk=payload.get('behavior_id', event.behavior_id), project=session.project
@@ -2697,7 +2697,7 @@ def annotation_create_api(request, pk: int):
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
-        return JsonResponse({'error': f_('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
+        return JsonResponse({'error': _('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
     annotation = SessionAnnotation.objects.create(
         session=session,
         timestamp_seconds=_decimal(payload.get('timestamp_seconds'), default='0'),
@@ -2729,7 +2729,7 @@ def annotation_update_api(request, pk: int):
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except json.JSONDecodeError as exc:
-        return JsonResponse({'error': f_('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
+        return JsonResponse({'error': _('Invalid JSON: %(error)s') % {'error': exc}}, status=400)
     annotation.timestamp_seconds = _decimal(
         payload.get('timestamp_seconds', annotation.timestamp_seconds), default='0'
     )
