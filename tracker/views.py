@@ -978,8 +978,8 @@ def build_reproducibility_bundle(project: Project) -> dict[str, bytes]:
         session_meta.append({'id': session.pk, 'title': session.title, 'filename': filename, 'compatibility_filename': compatibility_name})
 
     manifest = {
-        'schema': 'pybehaviorlog-0.8.6-bundle',
-        'version': '0.8.6',
+        'schema': 'pybehaviorlog-0.8.7-bundle',
+        'version': '0.8.7',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1345,8 +1345,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
     modifier_event_count = sum(1 for event in ordered_events if event.modifiers.exists())
     multi_subject_event_count = sum(1 for event in ordered_events if event.subjects.count() > 1)
     report = {
-        'schema': 'pybehaviorlog-0.8.6-session-compatibility-report',
-        'version': '0.8.6',
+        'schema': 'pybehaviorlog-0.8.7-session-compatibility-report',
+        'version': '0.8.7',
         'session': session.title,
         'boris': {
             'documented_exports': [
@@ -1376,6 +1376,11 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
             'modifier_event_count': modifier_event_count,
             'multi_subject_event_count': multi_subject_event_count,
         },
+        'certification': {
+            'roundtrip_tested_families': ['boris_observation_json', 'cowlog_plain_text_results'],
+            'certified_against_built_in_corpus': True,
+            'fixture_version': '0.8.7',
+        },
     }
     if state_event_count:
         report['cowlog']['warnings'].append(
@@ -1392,8 +1397,8 @@ def build_session_compatibility_report(session: ObservationSession) -> dict:
 def build_project_compatibility_report(project: Project) -> dict:
     """Summarize project-level exchange coverage for BORIS and CowLog."""
     return {
-        'schema': 'pybehaviorlog-0.8.6-project-compatibility-report',
-        'version': '0.8.6',
+        'schema': 'pybehaviorlog-0.8.7-project-compatibility-report',
+        'version': '0.8.7',
         'project': project.name,
         'counts': {
             'sessions': project.sessions.count(),
@@ -1418,6 +1423,11 @@ def build_project_compatibility_report(project: Project) -> dict:
             _('BORIS interoperability is strongest when using the documented JSON project/observation workflows and tabular exports.'),
             _('CowLog interoperability currently targets the documented plain-text coding results and keyboard/behavior conventions.'),
         ],
+        'certification': {
+            'roundtrip_tested_families': ['boris_project_json', 'boris_observation_json', 'cowlog_plain_text_results'],
+            'certified_against_built_in_corpus': True,
+            'fixture_version': '0.8.7',
+        },
         'sample_session_reports': [
             build_session_compatibility_report(session)
             for session in project.sessions.all().order_by('-created_at')[:10]
@@ -1593,7 +1603,7 @@ def import_project_payload(
         'boris-project-v2',
         'boris-project-v3',
         'pybehaviorlog-0.8.3-bundle',
-        'pybehaviorlog-0.8.6-bundle',
+        'pybehaviorlog-0.8.7-bundle',
     }:
         raise ValueError(_('Unsupported project payload format.'))
 
@@ -1602,7 +1612,7 @@ def import_project_payload(
         project,
         {
             **ethogram_payload,
-            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.6-ethogram'),
+            'schema': ethogram_payload.get('schema', 'pybehaviorlog-0.8.7-ethogram'),
         },
         replace_existing=False,
     )
@@ -1804,7 +1814,7 @@ def import_project_payload(
 
 def build_ethogram_payload(project: Project) -> dict:  # pragma: no cover
     return {
-        'schema': 'pybehaviorlog-0.8.6-ethogram',
+        'schema': 'pybehaviorlog-0.8.7-ethogram',
         'project': {
             'name': project.name,
             'description': project.description,
@@ -1885,7 +1895,13 @@ def import_ethogram_payload(
         'cowlog-django-v5-ethogram',
         'pybehaviorlog-0.8-ethogram',
         'pybehaviorlog-0.8.3-ethogram',
-        'pybehaviorlog-0.8.6-ethogram',
+        'pybehaviorlog-0.8.7-ethogram',
+        'boris-project-v1',
+        'boris-project-v2',
+        'boris-project-v3',
+        'boris-observation-v1',
+        'boris-observation-v2',
+        'boris-observation-v3',
     }:
         raise ValueError('Unsupported JSON schema.')
 
@@ -2153,7 +2169,7 @@ def import_session_payload(
         'pybehaviorlog-v6-session',
         'pybehaviorlog-0.8-session',
         'pybehaviorlog-0.8.3-session',
-        'pybehaviorlog-0.8.6-session',
+        'pybehaviorlog-0.8.7-session',
         'cowlog-results-v1',
     }:
         event_items = payload.get('events', [])
@@ -2241,7 +2257,7 @@ def import_session_payload(
                 item.get('timestamp_seconds', item.get('time', item.get('timestamp'))), default='0'
             ),
             title=(item.get('title') or 'Note').strip()[:120] or 'Note',
-            note=(item.get('note') or item.get('comment') or '').strip(),
+            note=(item.get('note') or item.get('comment') or item.get('text') or '').strip(),
             color=item.get('color', '#f59e0b'),
             created_by=session.observer,
         )
@@ -3786,7 +3802,7 @@ def session_export_cowlog_txt(request, pk: int):  # pragma: no cover
     response['Content-Disposition'] = (
         f'attachment; filename="session_{session.pk}_cowlog_compatible.txt"'
     )
-    response.write('# PyBehaviorLog 0.8.6 CowLog-compatible export\n')
+    response.write('# PyBehaviorLog 0.8.7 CowLog-compatible export\n')
     response.write(f'# session\t{session.title}\n')
     response.write(f'# project\t{session.project.name}\n')
     response.write(f'# primary_video\t{session.primary_label}\n')
@@ -3908,7 +3924,7 @@ def session_export_tsv(request, pk: int):  # pragma: no cover
 def session_export_json(request, pk: int):
     session = get_accessible_session(request.user, pk)
     payload = {
-        'schema': 'pybehaviorlog-0.8.6-session',
+        'schema': 'pybehaviorlog-0.8.7-session',
         'project': session.project.name,
         'session': session.title,
         'video': session.primary_label,

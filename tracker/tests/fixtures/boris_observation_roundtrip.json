@@ -1,0 +1,47 @@
+{
+  "schema": "boris-observation-v3",
+  "project_name": "Fixture Project",
+  "variables": {
+    "Location": "Barn A"
+  },
+  "observations": [
+    {
+      "title": "Fixture Observation",
+      "primary_video": "cam-1.mp4",
+      "synced_videos": ["cam-1.mp4", "cam-2.mp4"],
+      "observer": "fixture_user",
+      "events": [
+        {
+          "time": 1.0,
+          "behavior": "Eat",
+          "event_kind": "point",
+          "modifiers": ["Near"],
+          "comment": "feed visible",
+          "subjects": ["Cow 1"]
+        },
+        {
+          "time": 2.0,
+          "behavior": "Stand",
+          "event_kind": "start",
+          "modifiers": [],
+          "comment": "",
+          "subjects": ["Cow 1"]
+        },
+        {
+          "time": 4.0,
+          "behavior": "Stand",
+          "event_kind": "stop",
+          "modifiers": [],
+          "comment": "",
+          "subjects": ["Cow 1"]
+        }
+      ],
+      "annotations": [
+        {
+          "time": 3.0,
+          "text": "Observer note"
+        }
+      ]
+    }
+  ]
+}

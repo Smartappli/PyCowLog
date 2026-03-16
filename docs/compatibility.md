@@ -1,10 +1,10 @@
-# Compatibility profile for PyBehaviorLog 0.8.6
+# Compatibility profile for PyBehaviorLog 0.8.7
 
-PyBehaviorLog 0.8.6 strengthens interoperability with BORIS and CowLog around the formats and workflows that are publicly documented.
+PyBehaviorLog 0.8.7 strengthens interoperability with BORIS and CowLog around the formats and workflows that are publicly documented.
 
 ## BORIS coverage
 
-### Implemented in 0.8.6
+### Implemented in 0.8.7
 
 - BORIS-compatible observation JSON export
 - BORIS-compatible project JSON export
@@ -28,7 +28,7 @@ The safest paths are:
 
 ## CowLog coverage
 
-### Implemented in 0.8.6
+### Implemented in 0.8.7
 
 - Import of documented CowLog-like plain-text coding result files
 - Export of CowLog-compatible plain-text result files
@@ -37,7 +37,7 @@ The safest paths are:
 
 ### Current positioning
 
-CowLog compatibility in 0.8.6 focuses on the **documented plain-text coding result workflow**.
+CowLog compatibility in 0.8.7 focuses on the **documented plain-text coding result workflow**.
 
 CowLog plain-text exports do not preserve all PyBehaviorLog/BORIS semantics with the same fidelity, especially for:
 
@@ -48,9 +48,20 @@ CowLog plain-text exports do not preserve all PyBehaviorLog/BORIS semantics with
 
 For those cases, BORIS JSON and PyBehaviorLog JSON remain the preferred interchange formats.
 
+
+## Built-in certification baseline
+
+Version 0.8.7 adds a compact fixture corpus and automated round-trip tests for:
+
+- BORIS observation JSON
+- BORIS project JSON
+- CowLog-compatible plain-text result files
+
+Those fixtures are executed in the Django test suite and compared through normalization helpers so CI can detect semantic regressions even when raw JSON shapes differ.
+
 ## Compatibility reports
 
-PyBehaviorLog 0.8.6 adds machine-readable compatibility reports at both project and session level.
+PyBehaviorLog 0.8.7 adds machine-readable compatibility reports at both project and session level.
 
 They summarize:
 

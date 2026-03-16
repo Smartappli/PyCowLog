@@ -1,0 +1,4 @@
+# CowLog-compatible fixture
+1.0	Eat	Near	Cow 1
+2.0	Stand	start	Cow 1
+4.0	Stand	stop	Cow 1

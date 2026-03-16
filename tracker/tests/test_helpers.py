@@ -105,7 +105,7 @@ class HelperTests(TestCase):
 
     def test_build_project_statistics_and_payloads(self):
         payload = build_ethogram_payload(self.project)
-        self.assertEqual(payload['schema'], 'pybehaviorlog-0.8.6-ethogram')
+        self.assertEqual(payload['schema'], 'pybehaviorlog-0.8.7-ethogram')
         imported_categories, _, imported_behaviors = import_ethogram_payload(
             self.project, payload, replace_existing=False
         )
@@ -127,7 +127,7 @@ class HelperTests(TestCase):
 
     def test_import_session_payload_v83(self):
         payload = {
-            'schema': 'pybehaviorlog-0.8.6-session',
+            'schema': 'pybehaviorlog-0.8.7-session',
             'workflow_status': 'validated',
             'review_notes': 'Checked',
             'events': [

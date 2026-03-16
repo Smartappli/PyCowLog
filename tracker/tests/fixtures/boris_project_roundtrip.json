@@ -1,0 +1,117 @@
+{
+  "schema": "boris-project-v3",
+  "categories": [
+    {
+      "name": "Feeding",
+      "description": "Feeding behaviors",
+      "color": "#0f766e",
+      "sort_order": 1
+    }
+  ],
+  "modifiers": [
+    {
+      "name": "Near",
+      "key_binding": "N",
+      "sort_order": 1
+    }
+  ],
+  "behaviors": [
+    {
+      "name": "Eat",
+      "description": "Food intake",
+      "key_binding": "E",
+      "color": "#0f766e",
+      "mode": "point",
+      "sort_order": 1,
+      "category": "Feeding"
+    },
+    {
+      "name": "Stand",
+      "description": "Standing posture",
+      "key_binding": "S",
+      "color": "#1d4ed8",
+      "mode": "state",
+      "sort_order": 2,
+      "category": null
+    }
+  ],
+  "subject_groups": [
+    {
+      "name": "Adults",
+      "description": "Adult animals",
+      "color": "#7c3aed",
+      "sort_order": 1
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Cow 1",
+      "description": "Test subject",
+      "groups": ["Adults"],
+      "key_binding": "C",
+      "color": "#9333ea",
+      "sort_order": 1
+    }
+  ],
+  "variables": [
+    {
+      "label": "Location",
+      "description": "Observation location",
+      "value_type": "text",
+      "default_value": "Barn A"
+    }
+  ],
+  "observation_templates": [
+    {
+      "name": "Baseline",
+      "description": "Baseline template",
+      "default_session_kind": "media",
+      "behaviors": ["Eat", "Stand"],
+      "modifiers": ["Near"],
+      "subjects": ["Cow 1"],
+      "variable_definitions": ["Location"]
+    }
+  ],
+  "sessions": [
+    {
+      "title": "Fixture Observation",
+      "primary_video": "cam-1.mp4",
+      "synced_videos": ["cam-1.mp4"],
+      "variables": {
+        "Location": "Barn A"
+      },
+      "events": [
+        {
+          "time": 1.0,
+          "behavior": "Eat",
+          "event_kind": "point",
+          "modifiers": ["Near"],
+          "comment": "feed visible",
+          "subjects": ["Cow 1"]
+        },
+        {
+          "time": 2.0,
+          "behavior": "Stand",
+          "event_kind": "start",
+          "modifiers": [],
+          "comment": "",
+          "subjects": ["Cow 1"]
+        },
+        {
+          "time": 4.0,
+          "behavior": "Stand",
+          "event_kind": "stop",
+          "modifiers": [],
+          "comment": "",
+          "subjects": ["Cow 1"]
+        }
+      ],
+      "annotations": [
+        {
+          "time": 3.0,
+          "text": "Observer note"
+        }
+      ]
+    }
+  ]
+}
