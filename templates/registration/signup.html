@@ -1,15 +1,9 @@
 {% extends 'base.html' %}
-
-{% block title %}Inscription{% endblock %}
-
+{% block title %}Sign up{% endblock %}
 {% block content %}
-<section class="auth-card">
-    <h1>Inscription</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Créer le compte</button>
-    </form>
-    <p>Déjà inscrit ? <a href="{% url 'login' %}">Se connecter</a></p>
-</section>
+<article class="auth-card">
+    <h1>Create an account</h1>
+    <form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Sign up</button></form>
+    <p class="muted">Already registered? <a href="{% url 'login' %}">Log in</a>.</p>
+</article>
 {% endblock %}

@@ -1,18 +1,3 @@
 {% extends 'base.html' %}
-
-{% block title %}{% if mode == 'update' %}Modifier le modificateur{% else %}Nouveau modificateur{% endif %}{% endblock %}
-
-{% block content %}
-<article class="auth-card">
-    <h1>{% if mode == 'update' %}Modifier le modificateur{% else %}Ajouter un modificateur{% endif %}</h1>
-    <p>Projet : <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <div class="action-stack">
-            <button type="submit">{% if mode == 'update' %}Mettre à jour{% else %}Ajouter{% endif %}</button>
-            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour</a>
-        </div>
-    </form>
-</article>
-{% endblock %}
+{% block title %}{% if mode == 'update' %}Edit modifier{% else %}New modifier{% endif %}{% endblock %}
+{% block content %}<article class="auth-card"><h1>{% if mode == 'update' %}Edit modifier{% else %}Add modifier{% endif %}</h1><p>Project: <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p><form method="post">{% csrf_token %}{{ form.as_p }}<div class="action-stack"><button type="submit">{% if mode == 'update' %}Update{% else %}Create{% endif %}</button><a href="{{ project.get_absolute_url }}" role="button" class="secondary">Back</a></div></form></article>{% endblock %}

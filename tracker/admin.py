@@ -1,4 +1,3 @@
-
 from django.contrib import admin
 
 from .models import (
@@ -6,13 +5,16 @@ from .models import (
     BehaviorCategory,
     IndependentVariableDefinition,
     Modifier,
+    ObservationAuditLog,
     ObservationEvent,
     ObservationSession,
+    ObservationTemplate,
     ObservationVariableValue,
     Project,
     SessionAnnotation,
     SessionVideoLink,
     Subject,
+    SubjectGroup,
     VideoAsset,
 )
 
@@ -38,11 +40,19 @@ class ModifierAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
 
 
+@admin.register(SubjectGroup)
+class SubjectGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'project', 'sort_order', 'color')
+    list_filter = ('project',)
+    search_fields = ('name', 'description')
+
+
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     list_display = ('name', 'project', 'key_binding', 'sort_order', 'color')
-    list_filter = ('project',)
+    list_filter = ('project', 'groups')
     search_fields = ('name', 'description')
+    filter_horizontal = ('groups',)
 
 
 @admin.register(IndependentVariableDefinition)
@@ -57,6 +67,14 @@ class BehaviorAdmin(admin.ModelAdmin):
     list_display = ('name', 'project', 'mode', 'key_binding', 'category', 'sort_order')
     list_filter = ('project', 'mode', 'category')
     search_fields = ('name', 'description')
+
+
+@admin.register(ObservationTemplate)
+class ObservationTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'project', 'default_session_kind', 'created_at')
+    list_filter = ('project', 'default_session_kind')
+    search_fields = ('name', 'description')
+    filter_horizontal = ('behaviors', 'modifiers', 'subjects', 'variable_definitions')
 
 
 @admin.register(VideoAsset)
@@ -78,18 +96,36 @@ class VariableValueInline(admin.TabularInline):
 
 @admin.register(ObservationSession)
 class ObservationSessionAdmin(admin.ModelAdmin):
-    list_display = ('title', 'project', 'session_kind', 'video', 'observer', 'playback_rate', 'frame_step_seconds', 'created_at')
-    list_filter = ('project', 'session_kind', 'observer')
-    search_fields = ('title', 'notes', 'description')
+    list_display = (
+        'title',
+        'project',
+        'session_kind',
+        'workflow_status',
+        'video',
+        'observer',
+        'playback_rate',
+        'frame_step_seconds',
+        'created_at',
+    )
+    list_filter = ('project', 'session_kind', 'workflow_status', 'observer')
+    search_fields = ('title', 'notes', 'description', 'review_notes')
     inlines = [SessionVideoInline, VariableValueInline]
 
 
 @admin.register(ObservationEvent)
 class ObservationEventAdmin(admin.ModelAdmin):
-    list_display = ('session', 'subject', 'behavior', 'event_kind', 'timestamp_seconds', 'frame_index', 'created_at')
-    list_filter = ('session__project', 'event_kind', 'behavior__mode', 'subject')
+    list_display = (
+        'session',
+        'subject',
+        'behavior',
+        'event_kind',
+        'timestamp_seconds',
+        'frame_index',
+        'created_at',
+    )
+    list_filter = ('session__project', 'event_kind', 'behavior__mode', 'subject', 'subjects')
     search_fields = ('session__title', 'behavior__name', 'subject__name', 'comment')
-    filter_horizontal = ('modifiers',)
+    filter_horizontal = ('modifiers', 'subjects')
 
 
 @admin.register(SessionAnnotation)
@@ -110,3 +146,10 @@ class ObservationVariableValueAdmin(admin.ModelAdmin):
     list_display = ('session', 'definition', 'value')
     list_filter = ('session__project', 'definition')
     search_fields = ('session__title', 'definition__label', 'value')
+
+
+@admin.register(ObservationAuditLog)
+class ObservationAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('session', 'action', 'target_type', 'target_id', 'actor', 'created_at')
+    list_filter = ('session__project', 'action', 'target_type')
+    search_fields = ('session__title', 'summary', 'actor__username')

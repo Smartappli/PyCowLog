@@ -1,106 +1,88 @@
 {% extends 'base.html' %}
 
-{% block title %}Analytiques — {{ project.name }}{% endblock %}
+{% block title %}Analytics — {{ project.name }}{% endblock %}
 
 {% block content %}
 <header class="page-header">
     <div>
-        <h1>Analytiques — {{ project.name }}</h1>
-        <p>Vue projet agrégée sur toutes les sessions et export Excel consolidé.</p>
+        <h1>Analytics — {{ project.name }}</h1>
+        <p>Project-wide analytics with behavior totals, subject breakdowns, transition counts, and consolidated Excel export.</p>
     </div>
     <div class="action-stack compact">
-        <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour projet</a>
-        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button">Exporter XLSX</a>
+        <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Back to project</a>
+        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button">Export XLSX</a>
     </div>
 </header>
 
 <div class="grid two-columns">
     <article>
-        <h3>Résumé</h3>
+        <h3>Summary</h3>
         <div class="stats-row stacked">
             <span>{{ analytics.session_count }} sessions</span>
-            <span>{{ analytics.video_count }} vidéos</span>
-            <span>{{ analytics.behavior_count }} comportements</span>
-            <span>{{ analytics.event_count }} événements</span>
-            <span>{{ analytics.observed_span_seconds }} secondes observées</span>
+            <span>{{ analytics.video_count }} videos</span>
+            <span>{{ analytics.behavior_count }} behaviors</span>
+            <span>{{ analytics.event_count }} events</span>
+            <span>{{ analytics.annotation_count }} annotations</span>
+            <span>{{ analytics.observed_span_seconds }} observed seconds</span>
         </div>
     </article>
-
     <article>
-        <h3>Conseil</h3>
-        <p>Utilise l’export projet pour partager une synthèse globale avec les collaborateurs, puis les exports de session pour les analyses fines.</p>
+        <h3>What is new in V7?</h3>
+        <p>Subject-level summaries and transition analytics now complement the behavior totals already available in earlier versions.</p>
     </article>
 </div>
 
 <article>
-    <h3>Par session</h3>
+    <h3>By session</h3>
     <div class="table-wrapper">
         <table>
-            <thead>
-                <tr>
-                    <th>Session</th>
-                    <th>Observateur</th>
-                    <th>Vidéo principale</th>
-                    <th>Vidéos sync.</th>
-                    <th>Événements</th>
-                    <th>Points</th>
-                    <th>États ouverts</th>
-                    <th>Temps observé (s)</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Session</th><th>Observer</th><th>Primary video</th><th>Synced videos</th><th>Events</th><th>Points</th><th>Open states</th><th>Observed time (s)</th></tr></thead>
             <tbody>
                 {% for row in analytics.session_rows %}
-                    <tr>
-                        <td><a href="{% url 'tracker:session_player' row.session_id %}">{{ row.title }}</a></td>
-                        <td>{{ row.observer }}</td>
-                        <td>{{ row.video }}</td>
-                        <td>{{ row.synced_video_count }}</td>
-                        <td>{{ row.event_count }}</td>
-                        <td>{{ row.point_event_count }}</td>
-                        <td>{{ row.open_state_count }}</td>
-                        <td>{{ row.observed_span_seconds }}</td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="8">Aucune session.</td></tr>
-                {% endfor %}
+                    <tr><td><a href="{% url 'tracker:session_player' row.session_id %}">{{ row.title }}</a></td><td>{{ row.observer }}</td><td>{{ row.video }}</td><td>{{ row.synced_video_count }}</td><td>{{ row.event_count }}</td><td>{{ row.point_event_count }}</td><td>{{ row.open_state_count }}</td><td>{{ row.observed_span_seconds }}</td></tr>
+                {% empty %}<tr><td colspan="8">No sessions yet.</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>
 </article>
 
 <article>
-    <h3>Par comportement</h3>
+    <h3>By behavior</h3>
     <div class="table-wrapper">
         <table>
-            <thead>
-                <tr>
-                    <th>Catégorie</th>
-                    <th>Comportement</th>
-                    <th>Mode</th>
-                    <th>Sessions</th>
-                    <th>Points</th>
-                    <th>Starts</th>
-                    <th>Stops</th>
-                    <th>Segments</th>
-                    <th>Durée (s)</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Category</th><th>Behavior</th><th>Mode</th><th>Sessions</th><th>Points</th><th>Starts</th><th>Stops</th><th>Segments</th><th>Duration (s)</th></tr></thead>
             <tbody>
                 {% for row in analytics.behavior_rows %}
-                    <tr>
-                        <td>{{ row.category }}</td>
-                        <td>{{ row.name }}</td>
-                        <td>{{ row.mode }}</td>
-                        <td>{{ row.session_count }}</td>
-                        <td>{{ row.point_count }}</td>
-                        <td>{{ row.start_count }}</td>
-                        <td>{{ row.stop_count }}</td>
-                        <td>{{ row.segment_count }}</td>
-                        <td>{{ row.duration_seconds }}</td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="9">Aucun comportement.</td></tr>
-                {% endfor %}
+                    <tr><td>{{ row.category }}</td><td>{{ row.name }}</td><td>{{ row.mode }}</td><td>{{ row.session_count }}</td><td>{{ row.point_count }}</td><td>{{ row.start_count }}</td><td>{{ row.stop_count }}</td><td>{{ row.segment_count }}</td><td>{{ row.duration_seconds }}</td></tr>
+                {% empty %}<tr><td colspan="9">No behaviors yet.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article>
+    <h3>By subject</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Subject</th><th>Behavior</th><th>Mode</th><th>Points</th><th>Segments</th><th>Duration (s)</th></tr></thead>
+            <tbody>
+                {% for row in analytics.subject_rows %}
+                    <tr><td>{{ row.subject }}</td><td>{{ row.behavior }}</td><td>{{ row.mode }}</td><td>{{ row.point_count }}</td><td>{{ row.segment_count }}</td><td>{{ row.duration_seconds }}</td></tr>
+                {% empty %}<tr><td colspan="6">No subject-level events yet.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article>
+    <h3>Transitions</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>From</th><th>To</th><th>Count</th></tr></thead>
+            <tbody>
+                {% for row in analytics.transition_rows %}
+                    <tr><td>{{ row.from_behavior }}</td><td>{{ row.to_behavior }}</td><td>{{ row.count }}</td></tr>
+                {% empty %}<tr><td colspan="3">No transitions yet.</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>

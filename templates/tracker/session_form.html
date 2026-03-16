@@ -1,21 +1,11 @@
 {% extends 'base.html' %}
-
-{% block title %}{% if mode == 'update' %}Modifier la session PyBehaviorLog{% else %}Nouvelle session{% endif %}{% endblock %}
-
+{% block title %}{% if mode == 'update' %}Edit session{% else %}New session{% endif %}{% endblock %}
 {% block content %}
 <article class="auth-card wide-card">
     <header>
-        <h1>{% if mode == 'update' %}Modifier la session PyBehaviorLog{% else %}Créer une session PyBehaviorLog{% endif %}</h1>
-        <p>Projet : <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
+        <h1>{% if mode == 'update' %}Edit session{% else %}Create a session{% endif %}</h1>
+        <p>Project: <a href="{{ project.get_absolute_url }}">{{ project.name }}</a></p>
     </header>
-
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <div class="action-stack">
-            <button type="submit">{% if mode == 'update' %}Mettre à jour{% else %}Créer la session{% endif %}</button>
-            <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Retour</a>
-        </div>
-    </form>
+    <form method="post">{% csrf_token %}{{ form.as_p }}<div class="action-stack"><button type="submit">{% if mode == 'update' %}Update session{% else %}Create session{% endif %}</button><a href="{{ project.get_absolute_url }}" role="button" class="secondary">Back</a></div></form>
 </article>
 {% endblock %}

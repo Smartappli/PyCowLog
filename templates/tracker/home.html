@@ -1,15 +1,14 @@
-
 {% extends 'base.html' %}
 
-{% block title %}Mes projets PyBehaviorLog{% endblock %}
+{% block title %}My PyBehaviorLog projects{% endblock %}
 
 {% block content %}
 <header class="page-header">
     <div>
-        <h1>Mes projets PyBehaviorLog</h1>
-        <p>V6 : base PyBehaviorLog renommée, prête pour Python 3.13, tests unitaires, pre-commit et CI GitHub Actions.</p>
+        <h1>My PyBehaviorLog projects</h1>
+        <p>V7 adds subject groups, observation templates, review workflow, audit trail, subject-level analytics, and richer BORIS-inspired interoperability.</p>
     </div>
-    <a href="{% url 'tracker:project_create' %}" role="button">Nouveau projet</a>
+    <a href="{% url 'tracker:project_create' %}" role="button">New project</a>
 </header>
 
 <section class="card-grid">
@@ -18,30 +17,30 @@
             <div class="project-card-top">
                 <h3><a href="{{ project.get_absolute_url }}">{{ project.name }}</a></h3>
                 {% if project.owner_id == user.id %}
-                    <span class="pill">propriétaire</span>
+                    <span class="pill">owner</span>
                 {% else %}
-                    <span class="pill">collaborateur</span>
+                    <span class="pill">collaborator</span>
                 {% endif %}
             </div>
-            <p>{{ project.description|default:'Aucune description.' }}</p>
-            <p class="muted">Propriétaire : {{ project.owner.username }}</p>
+            <p>{{ project.description|default:'No description yet.' }}</p>
+            <p class="muted">Owner: {{ project.owner.username }}</p>
             <div class="stats-row">
-                <span>{{ project.categories.count }} catégories</span>
-                <span>{{ project.modifiers.count }} modificateurs</span>
-                <span>{{ project.behaviors.count }} comportements</span>
-                <span>{{ project.videos.count }} vidéos</span>
+                <span>{{ project.categories.count }} categories</span>
+                <span>{{ project.modifiers.count }} modifiers</span>
+                <span>{{ project.subjects.count }} subjects</span>
+                <span>{{ project.behaviors.count }} behaviors</span>
                 <span>{{ project.sessions.count }} sessions</span>
             </div>
             <div class="action-stack compact">
-                <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Ouvrir</a>
-                <a href="{% url 'tracker:project_analytics' project.pk %}" role="button" class="outline">Analytiques</a>
-                <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="outline">Éthogramme JSON</a>
+                <a href="{{ project.get_absolute_url }}" role="button" class="secondary">Open</a>
+                <a href="{% url 'tracker:project_analytics' project.pk %}" role="button" class="outline">Analytics</a>
+                <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="outline">Ethogram JSON</a>
             </div>
         </article>
     {% empty %}
         <article>
-            <h3>Aucun projet</h3>
-            <p>Crée ton premier projet pour commencer à coder des comportements à partir de vidéos ou en live.</p>
+            <h3>No projects yet</h3>
+            <p>Create your first project to start coding behavior from video or live observation sessions.</p>
         </article>
     {% endfor %}
 </section>

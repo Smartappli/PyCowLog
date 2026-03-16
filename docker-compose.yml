@@ -1,0 +1,74 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - granian
+      - --interface
+      - asgi
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "2"
+      - --blocking-threads
+      - "4"
+      - config.asgi:application
+    env_file:
+      - .env.example
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost,http://127.0.0.1
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: pybehaviorlog
+      POSTGRES_USER: pybehaviorlog
+      POSTGRES_PASSWORD: pybehaviorlog
+      REDIS_URL: redis://redis:6379/1
+      SESSION_COOKIE_SECURE: "0"
+      CSRF_COOKIE_SECURE: "0"
+    volumes:
+      - .:/app
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_DB: pybehaviorlog
+      POSTGRES_USER: pybehaviorlog
+      POSTGRES_PASSWORD: pybehaviorlog
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pybehaviorlog -d pybehaviorlog"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres18_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-bookworm
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis8_data:/data
+
+volumes:
+  postgres18_data:
+  redis8_data:
+  staticfiles:
+  media:

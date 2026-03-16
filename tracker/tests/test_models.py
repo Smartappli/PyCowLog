@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -9,13 +8,14 @@ from tracker.models import (
     BehaviorCategory,
     IndependentVariableDefinition,
     Modifier,
+    ObservationAuditLog,
     ObservationEvent,
     ObservationSession,
     Project,
     Subject,
+    SubjectGroup,
     VideoAsset,
 )
-
 
 User = get_user_model()
 
@@ -23,7 +23,7 @@ User = get_user_model()
 class ModelTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='olivier', password='pass12345')
-        self.project = Project.objects.create(owner=self.user, name='Projet 1')
+        self.project = Project.objects.create(owner=self.user, name='Project 1')
         self.category = BehaviorCategory.objects.create(project=self.project, name='General')
         self.behavior = Behavior.objects.create(
             project=self.project,
@@ -32,16 +32,10 @@ class ModelTests(TestCase):
             key_binding='e',
             mode=Behavior.MODE_POINT,
         )
-        self.modifier = Modifier.objects.create(
-            project=self.project,
-            name='Near',
-            key_binding='n',
-        )
-        self.subject = Subject.objects.create(
-            project=self.project,
-            name='Cow 1',
-            key_binding='c',
-        )
+        self.modifier = Modifier.objects.create(project=self.project, name='Near', key_binding='n')
+        self.group = SubjectGroup.objects.create(project=self.project, name='Adults')
+        self.subject = Subject.objects.create(project=self.project, name='Cow 1', key_binding='c')
+        self.subject.groups.add(self.group)
         self.variable = IndependentVariableDefinition.objects.create(
             project=self.project,
             label='Weather',
@@ -69,7 +63,9 @@ class ModelTests(TestCase):
         self.assertEqual(session.all_videos_ordered, [])
 
     def test_session_primary_label_for_media(self):
-        video = VideoAsset.objects.create(project=self.project, title='Vid 1', file='videos/test.mp4')
+        video = VideoAsset.objects.create(
+            project=self.project, title='Vid 1', file='videos/test.mp4'
+        )
         session = ObservationSession.objects.create(
             project=self.project,
             observer=self.user,
@@ -79,12 +75,13 @@ class ModelTests(TestCase):
         )
         self.assertEqual(session.primary_label, 'Vid 1')
 
-    def test_event_with_subject_and_frame(self):
+    def test_event_with_subjects_display_and_lock_flag(self):
         session = ObservationSession.objects.create(
             project=self.project,
             observer=self.user,
             title='Observation',
             session_kind=ObservationSession.KIND_LIVE,
+            workflow_status=ObservationSession.STATUS_LOCKED,
         )
         event = ObservationEvent.objects.create(
             session=session,
@@ -94,5 +91,23 @@ class ModelTests(TestCase):
             timestamp_seconds=Decimal('1.250'),
             frame_index=31,
         )
-        self.assertEqual(event.subject.name, 'Cow 1')
+        event.subjects.add(self.subject)
+        self.assertEqual(event.subjects_display, 'Cow 1')
         self.assertEqual(event.frame_index, 31)
+        self.assertTrue(session.is_locked_for_coding)
+
+    def test_audit_log_string(self):
+        session = ObservationSession.objects.create(
+            project=self.project,
+            observer=self.user,
+            title='Audit session',
+            session_kind=ObservationSession.KIND_LIVE,
+        )
+        log = ObservationAuditLog.objects.create(
+            session=session,
+            actor=self.user,
+            target_type=ObservationAuditLog.TARGET_SESSION,
+            action=ObservationAuditLog.ACTION_STATUS,
+            summary='Workflow changed to validated.',
+        )
+        self.assertIn('status', str(log))

@@ -1,44 +1,77 @@
+{% load static i18n %}
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
 <head>
-    {% load static %}
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}CowLog Django V4{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <title>{% block title %}PyBehaviorLog V7{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'tracker/app.css' %}">
 </head>
 <body>
-    <main class="container">
-        <nav>
-            <ul>
-                <li><strong><a href="{% url 'tracker:home' %}">CowLog Django V4</a></strong></li>
-            </ul>
-            <ul>
+    <div class="shell">
+        <header class="masthead">
+            <div class="brand-stack">
+                <a class="brand-mark" href="{% url 'tracker:home' %}">PB</a>
+                <div>
+                    <p class="eyebrow">{% trans 'Behavioral coding studio' %}</p>
+                    <h1 class="brand-title"><a href="{% url 'tracker:home' %}">PyBehaviorLog V7</a></h1>
+                </div>
+            </div>
+            <div class="utility-row">
+                <form action="{% url 'set_language' %}" method="post" class="language-form panel-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label for="language-select" class="sr-only">{% trans 'Language' %}</label>
+                    <select id="language-select" name="language" onchange="this.form.submit()">
+                        {% get_current_language as CURRENT_LANGUAGE %}
+                        {% get_available_languages as AVAILABLE_LANGUAGES %}
+                        {% get_language_info_list for AVAILABLE_LANGUAGES as languages %}
+                        {% for language in languages %}
+                            <option value="{{ language.code }}" {% if language.code == CURRENT_LANGUAGE %}selected{% endif %}>{{ language.name_local }} ({{ language.code }})</option>
+                        {% endfor %}
+                    </select>
+                </form>
                 {% if user.is_authenticated %}
-                    <li><a href="{% url 'tracker:project_create' %}">Nouveau projet</a></li>
-                    <li><a href="/admin/">Admin</a></li>
-                    <li><span class="muted">{{ user.username }}</span></li>
-                    <li>
-                        <form action="{% url 'logout' %}" method="post" class="inline-form">
-                            {% csrf_token %}
-                            <button type="submit" class="secondary">Déconnexion</button>
-                        </form>
-                    </li>
-                {% else %}
-                    <li><a href="{% url 'login' %}">Connexion</a></li>
-                    <li><a href="{% url 'signup' %}">Inscription</a></li>
+                    <div class="panel-inline user-chip">
+                        <span class="chip-label">{% trans 'Signed in as' %}</span>
+                        <strong>{{ user.username }}</strong>
+                    </div>
                 {% endif %}
-            </ul>
+            </div>
+        </header>
+
+        <nav class="top-nav panel">
+            <div class="nav-group">
+                <a href="{% url 'tracker:home' %}">{% trans 'Dashboard' %}</a>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'tracker:project_create' %}">{% trans 'New project' %}</a>
+                    <a href="/admin/">{% trans 'Administration' %}</a>
+                {% endif %}
+            </div>
+            <div class="nav-group nav-actions">
+                {% if user.is_authenticated %}
+                    <form action="{% url 'logout' %}" method="post" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="button button-ghost">{% trans 'Log out' %}</button>
+                    </form>
+                {% else %}
+                    <a class="button button-ghost" href="{% url 'login' %}">{% trans 'Log in' %}</a>
+                    <a class="button" href="{% url 'signup' %}">{% trans 'Create account' %}</a>
+                {% endif %}
+            </div>
         </nav>
 
         {% if messages %}
-            {% for message in messages %}
-                <article class="message {{ message.tags }}">{{ message }}</article>
-            {% endfor %}
+            <section class="flash-stack">
+                {% for message in messages %}
+                    <article class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</article>
+                {% endfor %}
+            </section>
         {% endif %}
 
-        {% block content %}{% endblock %}
-    </main>
+        <main class="content-shell">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 </body>
 </html>

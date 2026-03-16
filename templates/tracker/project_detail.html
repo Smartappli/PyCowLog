@@ -6,41 +6,46 @@
 <header class="page-header">
     <div>
         <h1>{{ project.name }}</h1>
-        <p>{{ project.description|default:'Aucune description.' }}</p>
-        <p class="muted">Propriétaire : {{ project.owner.username }}</p>
-        <p class="muted">Collaborateurs :
+        <p>{{ project.description|default:'No description yet.' }}</p>
+        <p class="muted">Owner: {{ project.owner.username }}</p>
+        <p class="muted">Collaborators:
             {% for collaborator in project.collaborators.all %}
                 {{ collaborator.username }}{% if not forloop.last %}, {% endif %}
             {% empty %}
-                aucun
+                none
             {% endfor %}
         </p>
     </div>
     <div class="action-stack">
-        <a href="{% url 'tracker:project_analytics' project.pk %}" role="button">Analytiques</a>
-        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button" class="secondary">Export XLSX</a>
-        <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="secondary">Exporter l'éthogramme</a>
+        <a href="{% url 'tracker:project_analytics' project.pk %}" role="button">Analytics</a>
+        <a href="{% url 'tracker:project_export_xlsx' project.pk %}" role="button" class="secondary">Project XLSX</a>
+        <a href="{% url 'tracker:project_export_ethogram' project.pk %}" role="button" class="secondary">Export ethogram</a>
         {% if is_owner %}
-            <a href="{% url 'tracker:project_import_ethogram' project.pk %}" role="button" class="secondary">Importer un éthogramme</a>
-            <a href="{% url 'tracker:project_update' project.pk %}" role="button" class="contrast">Paramètres</a>
-            <a href="{% url 'tracker:category_create' project.pk %}" role="button" class="secondary">Nouvelle catégorie</a>
-            <a href="{% url 'tracker:modifier_create' project.pk %}" role="button" class="secondary">Nouveau modificateur</a>
-            <a href="{% url 'tracker:behavior_create' project.pk %}" role="button">Nouveau comportement</a>
-            <a href="{% url 'tracker:video_create' project.pk %}" role="button" class="secondary">Nouvelle vidéo</a>
+            <a href="{% url 'tracker:project_import_ethogram' project.pk %}" role="button" class="secondary">Import ethogram</a>
+            <a href="{% url 'tracker:project_update' project.pk %}" role="button" class="contrast">Settings</a>
+            <a href="{% url 'tracker:category_create' project.pk %}" role="button" class="secondary">New category</a>
+            <a href="{% url 'tracker:modifier_create' project.pk %}" role="button" class="secondary">New modifier</a>
+            <a href="{% url 'tracker:subject_group_create' project.pk %}" role="button" class="secondary">New subject group</a>
+            <a href="{% url 'tracker:subject_create' project.pk %}" role="button" class="secondary">New subject</a>
+            <a href="{% url 'tracker:independent_variable_create' project.pk %}" role="button" class="secondary">New variable</a>
+            <a href="{% url 'tracker:observation_template_create' project.pk %}" role="button" class="secondary">New template</a>
+            <a href="{% url 'tracker:behavior_create' project.pk %}" role="button">New behavior</a>
+            <a href="{% url 'tracker:video_create' project.pk %}" role="button" class="secondary">New video</a>
         {% endif %}
-        <a href="{% url 'tracker:session_create' project.pk %}" role="button" class="contrast">Nouvelle session</a>
+        <a href="{% url 'tracker:session_create' project.pk %}" role="button" class="contrast">New session</a>
     </div>
 </header>
 
 <section class="card-grid dashboard-grid">
     <article>
-        <h3>Vue rapide</h3>
+        <h3>Quick overview</h3>
         <div class="stats-row stacked">
             <span>{{ analytics.session_count }} sessions</span>
-            <span>{{ analytics.video_count }} vidéos</span>
-            <span>{{ analytics.behavior_count }} comportements</span>
-            <span>{{ analytics.event_count }} événements</span>
-            <span>{{ analytics.observed_span_seconds }} s observées</span>
+            <span>{{ analytics.video_count }} videos</span>
+            <span>{{ analytics.behavior_count }} behaviors</span>
+            <span>{{ project.subjects.count }} subjects</span>
+            <span>{{ analytics.event_count }} events</span>
+            <span>{{ analytics.observed_span_seconds }} observed seconds</span>
         </div>
     </article>
 </section>
@@ -48,124 +53,110 @@
 <div class="grid two-columns project-grid-v4">
     <section>
         <article>
-            <div class="section-headline">
-                <h3>Catégories</h3>
-            </div>
+            <div class="section-headline"><h3>Categories</h3></div>
             <ul class="managed-list">
                 {% for category in project.categories.all %}
                     <li>
-                        <div>
-                            <span class="behavior-badge" style="background-color: {{ category.color }};"></span>
-                            {{ category.name }}
-                        </div>
-                        {% if is_owner %}
-                            <div class="mini-actions">
-                                <a href="{% url 'tracker:category_update' category.pk %}">Modifier</a>
-                                <a href="{% url 'tracker:category_delete' category.pk %}">Supprimer</a>
-                            </div>
-                        {% endif %}
+                        <div><span class="behavior-badge" style="background-color: {{ category.color }};"></span>{{ category.name }}</div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:category_update' category.pk %}">Edit</a><a href="{% url 'tracker:category_delete' category.pk %}">Delete</a></div>{% endif %}
                     </li>
-                {% empty %}
-                    <li>Aucune catégorie.</li>
-                {% endfor %}
+                {% empty %}<li>No categories yet.</li>{% endfor %}
             </ul>
         </article>
-
         <article>
-            <div class="section-headline">
-                <h3>Modificateurs</h3>
-            </div>
+            <div class="section-headline"><h3>Modifiers</h3></div>
             <ul class="managed-list">
                 {% for modifier in project.modifiers.all %}
                     <li>
                         <div><kbd>{{ modifier.key_binding }}</kbd> {{ modifier.name }}{% if modifier.description %} — {{ modifier.description }}{% endif %}</div>
-                        {% if is_owner %}
-                            <div class="mini-actions">
-                                <a href="{% url 'tracker:modifier_update' modifier.pk %}">Modifier</a>
-                                <a href="{% url 'tracker:modifier_delete' modifier.pk %}">Supprimer</a>
-                            </div>
-                        {% endif %}
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:modifier_update' modifier.pk %}">Edit</a><a href="{% url 'tracker:modifier_delete' modifier.pk %}">Delete</a></div>{% endif %}
                     </li>
-                {% empty %}
-                    <li>Aucun modificateur.</li>
-                {% endfor %}
+                {% empty %}<li>No modifiers yet.</li>{% endfor %}
             </ul>
         </article>
-
         <article>
-            <div class="section-headline">
-                <h3>Comportements</h3>
-            </div>
+            <div class="section-headline"><h3>Subject groups</h3></div>
             <ul class="managed-list">
-                {% for behavior in project.behaviors.all %}
+                {% for group in project.subject_groups.all %}
+                    <li>
+                        <div><span class="behavior-badge" style="background-color: {{ group.color }};"></span>{{ group.name }}</div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:subject_group_update' group.pk %}">Edit</a><a href="{% url 'tracker:subject_group_delete' group.pk %}">Delete</a></div>{% endif %}
+                    </li>
+                {% empty %}<li>No subject groups yet.</li>{% endfor %}
+            </ul>
+        </article>
+        <article>
+            <div class="section-headline"><h3>Subjects</h3></div>
+            <ul class="managed-list">
+                {% for subject in project.subjects.all %}
                     <li>
                         <div>
-                            <span class="behavior-badge" style="background-color: {{ behavior.color }};"></span>
-                            <strong>{{ behavior.name }}</strong>
-                            <span class="pill">{{ behavior.mode }}</span>
-                            {% if behavior.category %}<span class="muted">{{ behavior.category.name }}</span>{% endif %}
-                            <span><kbd>{{ behavior.key_binding }}</kbd></span>
+                            <span class="behavior-badge" style="background-color: {{ subject.color }};"></span>
+                            <strong>{{ subject.name }}</strong>
+                            {% if subject.groups.all %}<span class="muted">{% for group in subject.groups.all %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+                            {% if subject.key_binding %}<span><kbd>{{ subject.key_binding }}</kbd></span>{% endif %}
                         </div>
-                        {% if is_owner %}
-                            <div class="mini-actions">
-                                <a href="{% url 'tracker:behavior_update' behavior.pk %}">Modifier</a>
-                                <a href="{% url 'tracker:behavior_delete' behavior.pk %}">Supprimer</a>
-                            </div>
-                        {% endif %}
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:subject_update' subject.pk %}">Edit</a><a href="{% url 'tracker:subject_delete' subject.pk %}">Delete</a></div>{% endif %}
                     </li>
-                {% empty %}
-                    <li>Aucun comportement.</li>
-                {% endfor %}
+                {% empty %}<li>No subjects yet.</li>{% endfor %}
             </ul>
         </article>
     </section>
 
     <section>
         <article>
-            <div class="section-headline">
-                <h3>Vidéos</h3>
-            </div>
+            <div class="section-headline"><h3>Variables</h3></div>
+            <ul class="managed-list">
+                {% for variable in project.variable_definitions.all %}
+                    <li>
+                        <div><strong>{{ variable.label }}</strong> <span class="pill">{{ variable.value_type }}</span></div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:independent_variable_update' variable.pk %}">Edit</a><a href="{% url 'tracker:independent_variable_delete' variable.pk %}">Delete</a></div>{% endif %}
+                    </li>
+                {% empty %}<li>No independent variables yet.</li>{% endfor %}
+            </ul>
+        </article>
+        <article>
+            <div class="section-headline"><h3>Observation templates</h3></div>
+            <ul class="managed-list">
+                {% for template in project.observation_templates.all %}
+                    <li>
+                        <div><strong>{{ template.name }}</strong> <span class="pill">{{ template.default_session_kind }}</span></div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:observation_template_update' template.pk %}">Edit</a><a href="{% url 'tracker:observation_template_delete' template.pk %}">Delete</a></div>{% endif %}
+                    </li>
+                {% empty %}<li>No templates yet.</li>{% endfor %}
+            </ul>
+        </article>
+        <article>
+            <div class="section-headline"><h3>Behaviors</h3></div>
+            <ul class="managed-list">
+                {% for behavior in project.behaviors.all %}
+                    <li>
+                        <div><span class="behavior-badge" style="background-color: {{ behavior.color }};"></span><strong>{{ behavior.name }}</strong><span class="pill">{{ behavior.mode }}</span>{% if behavior.category %}<span class="muted">{{ behavior.category.name }}</span>{% endif %}<span><kbd>{{ behavior.key_binding }}</kbd></span></div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:behavior_update' behavior.pk %}">Edit</a><a href="{% url 'tracker:behavior_delete' behavior.pk %}">Delete</a></div>{% endif %}
+                    </li>
+                {% empty %}<li>No behaviors yet.</li>{% endfor %}
+            </ul>
+        </article>
+        <article>
+            <div class="section-headline"><h3>Videos</h3></div>
             <ul class="managed-list">
                 {% for video in project.videos.all %}
                     <li>
-                        <div>
-                            <strong>{{ video.title }}</strong>
-                            {% if video.notes %}<span class="muted">— {{ video.notes|truncatechars:80 }}</span>{% endif %}
-                        </div>
-                        {% if is_owner %}
-                            <div class="mini-actions">
-                                <a href="{% url 'tracker:video_update' video.pk %}">Modifier</a>
-                                <a href="{% url 'tracker:video_delete' video.pk %}">Supprimer</a>
-                            </div>
-                        {% endif %}
+                        <div><strong>{{ video.title }}</strong>{% if video.notes %}<span class="muted"> — {{ video.notes|truncatechars:80 }}</span>{% endif %}</div>
+                        {% if is_owner %}<div class="mini-actions"><a href="{% url 'tracker:video_update' video.pk %}">Edit</a><a href="{% url 'tracker:video_delete' video.pk %}">Delete</a></div>{% endif %}
                     </li>
-                {% empty %}
-                    <li>Aucune vidéo.</li>
-                {% endfor %}
+                {% empty %}<li>No videos yet.</li>{% endfor %}
             </ul>
         </article>
-
         <article>
-            <div class="section-headline">
-                <h3>Sessions</h3>
-            </div>
+            <div class="section-headline"><h3>Sessions</h3></div>
             <ul class="managed-list">
                 {% for session in project.sessions.all %}
                     <li>
-                        <div>
-                            <a href="{{ session.get_absolute_url }}"><strong>{{ session.title }}</strong></a>
-                            — {{ session.primary_label }}
-                            <span class="muted">({{ session.video_links.count }} vidéo{{ session.video_links.count|pluralize }})</span>
-                            {% if session.observer %}<span class="muted">· {{ session.observer.username }}</span>{% endif %}
-                        </div>
-                        <div class="mini-actions">
-                            <a href="{% url 'tracker:session_update' session.pk %}">Modifier</a>
-                            <a href="{% url 'tracker:session_delete' session.pk %}">Supprimer</a>
-                        </div>
+                        <div><a href="{{ session.get_absolute_url }}"><strong>{{ session.title }}</strong></a> — {{ session.primary_label }} <span class="pill">{{ session.workflow_status }}</span>{% if session.observer %}<span class="muted"> · {{ session.observer.username }}</span>{% endif %}</div>
+                        <div class="mini-actions"><a href="{% url 'tracker:session_update' session.pk %}">Edit</a><a href="{% url 'tracker:session_delete' session.pk %}">Delete</a></div>
                     </li>
-                {% empty %}
-                    <li>Aucune session.</li>
-                {% endfor %}
+                {% empty %}<li>No sessions yet.</li>{% endfor %}
             </ul>
         </article>
     </section>

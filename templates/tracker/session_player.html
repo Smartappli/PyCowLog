@@ -6,12 +6,12 @@
 <header class="page-header">
     <div>
         <h1>{{ session.title }}</h1>
-        <p>Projet : <a href="{{ session.project.get_absolute_url }}">{{ session.project.name }}</a> · Source principale : {{ session.primary_label }}</p>
-        <p class="muted">Observateur : {{ session.observer.username|default:'non défini' }} · Vitesse : {{ session.playback_rate }}x · Pas image : {{ session.frame_step_seconds }} s · {{ synced_videos|length }} vidéo{{ synced_videos|length|pluralize }} synchronisée{{ synced_videos|length|pluralize }}</p>
+        <p>Project: <a href="{{ session.project.get_absolute_url }}">{{ session.project.name }}</a> · Primary source: {{ session.primary_label }} · Workflow: <strong>{{ session.workflow_status }}</strong></p>
+        <p class="muted">Observer: {{ session.observer.username|default:'not set' }} · Playback: {{ session.playback_rate }}x · Frame step: {{ session.frame_step_seconds }} s · {{ synced_videos|length }} synced video{{ synced_videos|length|pluralize }}</p>
     </div>
     <div class="action-stack compact">
-        <a href="{% url 'tracker:session_update' session.pk %}" role="button" class="secondary">Paramètres</a>
-        <a href="{% url 'tracker:session_import_json' session.pk %}" role="button" class="secondary">Importer JSON</a>
+        <a href="{% url 'tracker:session_update' session.pk %}" role="button" class="secondary">Settings</a>
+        <a href="{% url 'tracker:session_import_json' session.pk %}" role="button" class="secondary">Import JSON</a>
         <a href="{% url 'tracker:session_export_csv' session.pk %}" role="button" class="secondary">CSV</a>
         <a href="{% url 'tracker:session_export_tsv' session.pk %}" role="button" class="secondary">TSV</a>
         <a href="{% url 'tracker:session_export_json' session.pk %}" role="button" class="secondary">JSON</a>
@@ -23,7 +23,7 @@
 <div class="grid two-columns player-layout">
     <section>
         <article>
-            <h3>Lecteur principal</h3>
+            <h3>Primary player</h3>
             {% if session.video %}
             <video id="main-video" controls preload="metadata" class="session-video" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
                 <source src="{{ session.video.file.url }}">
@@ -32,17 +32,17 @@
             <div id="main-video" class="session-video live-panel" data-base-rate="{{ session.playback_rate|floatformat:2 }}">
                 <div class="live-panel-inner">
                     <strong>Session live</strong>
-                    <p>Aucun média principal n'est associé à cette session. Le chronomètre et la saisie d'événements restent disponibles.</p>
+                    <p>No primary media file is attached to this session. The timer and event coding tools remain available.</p>
                 </div>
             </div>
             {% endif %}
             <div class="video-controls-inline">
-                <button type="button" id="play-pause-btn" class="secondary">Lecture / pause</button>
+                <button type="button" id="play-pause-btn" class="secondary">Play / pause</button>
                 <button type="button" id="back-2-btn" class="secondary">-2 s</button>
                 <button type="button" id="forward-2-btn" class="secondary">+2 s</button>
                 <button type="button" id="prev-frame-btn" class="secondary">-1 image</button>
                 <button type="button" id="next-frame-btn" class="secondary">+1 image</button>
-                <button type="button" id="clear-modifiers-btn" class="secondary">Vider modificateurs</button>
+                <button type="button" id="clear-modifiers-btn" class="secondary">Clear modifiers</button>
                 <span id="video-time" class="pill large-pill">0.000 s</span>
             </div>
             {% if session.notes %}
@@ -52,7 +52,7 @@
 
         {% if synced_videos|length > 1 %}
         <article>
-            <h3>Vidéos synchronisées</h3>
+            <h3>Synchronized videos</h3>
             <div class="sync-grid">
                 {% for link in synced_videos %}
                     {% if forloop.first %}{% else %}
@@ -69,8 +69,8 @@
         {% endif %}
 
         <article>
-            <h3>Comportements</h3>
-            <div class="keyboard-hint">Touche du comportement = ajout auto · Alt = START forcé · Shift = STOP forcé · E = note rapide</div>
+            <h3>Behaviors</h3>
+            <div class="keyboard-hint">Behavior hotkey = instant code · Alt = forced START · Shift = forced STOP · E = quick note</div>
             <div class="behavior-list">
                 {% for behavior in behaviors %}
                     <button type="button" class="behavior-button" data-behavior-id="{{ behavior.id }}" data-key="{{ behavior.key_binding|lower }}" data-mode="{{ behavior.mode }}" data-color="{{ behavior.color }}">
@@ -80,14 +80,30 @@
                         <kbd>{{ behavior.key_binding }}</kbd>
                     </button>
                 {% empty %}
-                    <p>Aucun comportement.</p>
+                    <p>No behaviors available.</p>
                 {% endfor %}
             </div>
         </article>
 
         <article>
-            <h3>Modificateurs</h3>
-            <div class="keyboard-hint">Touche du modificateur = active/désactive · Backspace = vider</div>
+            <h3>Subjects</h3>
+            <div class="keyboard-hint">Select one or more subjects. Selected subjects are attached to the next coded event.</div>
+            <div class="modifier-list" id="subject-list">
+                {% for subject in subjects %}
+                    <button type="button" class="modifier-button subject-button" data-subject-id="{{ subject.id }}" data-key="{{ subject.key_binding|lower }}">
+                        {% if subject.key_binding %}<kbd>{{ subject.key_binding }}</kbd>{% endif %}
+                        <span>{{ subject.name }}</span>
+                    </button>
+                {% empty %}
+                    <p>No subjects available.</p>
+                {% endfor %}
+            </div>
+            <p id="active-subjects-output" class="muted">No active subjects.</p>
+        </article>
+
+        <article>
+            <h3>Modifiers</h3>
+            <div class="keyboard-hint">Modifier hotkey = toggle on/off · Backspace = clear selection</div>
             <div class="modifier-list">
                 {% for modifier in modifiers %}
                     <button type="button" class="modifier-button" data-modifier-id="{{ modifier.id }}" data-key="{{ modifier.key_binding|lower }}">
@@ -95,25 +111,25 @@
                         <span>{{ modifier.name }}</span>
                     </button>
                 {% empty %}
-                    <p>Aucun modificateur.</p>
+                    <p>No modifiers available.</p>
                 {% endfor %}
             </div>
-            <p id="active-modifiers-output" class="muted">Aucun modificateur actif.</p>
+            <p id="active-modifiers-output" class="muted">No active modifiers.</p>
             <div id="active-states-container" class="state-container"></div>
         </article>
 
         <article>
             <div class="section-headline">
-                <h3>Timeline globale</h3>
-                <span class="muted">Buckets d’1 minute</span>
+                <h3>Global timeline</h3>
+                <span class="muted">One-minute buckets</span>
             </div>
             <div id="timeline-grid" class="timeline-grid"></div>
         </article>
 
         <article>
             <div class="section-headline">
-                <h3>Timeline par piste</h3>
-                <span class="muted">Vue type BORIS simplifiée</span>
+                <h3>Track timeline</h3>
+                <span class="muted">Simplified BORIS-style view</span>
             </div>
             <div id="track-container" class="track-container"></div>
         </article>
@@ -123,24 +139,24 @@
         <article>
             <div class="section-headline">
                 <h3>Statistiques</h3>
-                <span class="pill">mise à jour dynamique</span>
+                <span class="pill">live update</span>
             </div>
             <div class="stats-row stacked" id="summary-strip">
-                <span>{{ stats.session_event_count }} événements</span>
+                <span>{{ stats.session_event_count }} events</span>
                 <span>{{ stats.annotation_count }} annotations</span>
                 <span>{{ stats.point_event_count }} points</span>
-                <span>{{ stats.open_state_count }} états ouverts</span>
-                <span>{{ stats.observed_span_seconds }} s observées</span>
+                <span>{{ stats.open_state_count }} open states</span>
+                <span>{{ stats.observed_span_seconds }}  s observed</span>
             </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="stats-table">
                     <thead>
                         <tr>
-                            <th>Comportement</th>
+                            <th>Behavior</th>
                             <th>Mode</th>
                             <th>Points</th>
                             <th>Segments</th>
-                            <th>Durée</th>
+                            <th>Duration</th>
                             <th>%</th>
                             <th>Ouvert</th>
                         </tr>
@@ -152,15 +168,15 @@
 
         <article>
             <div class="section-headline">
-                <h3>Intégrité et intervalles</h3>
-                <button type="button" id="refresh-events-btn" class="secondary">Rafraîchir</button>
+                <h3>Integrity and intervals</h3>
+                <button type="button" id="refresh-events-btn" class="secondary">Refresh</button>
             </div>
             <div id="integrity-output" class="integrity-box"></div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="intervals-table">
                     <thead>
                         <tr>
-                            <th>Comportement</th>
+                            <th>Behavior</th>
                             <th>Nb</th>
                             <th>Moyenne</th>
                             <th>Min</th>
@@ -175,13 +191,13 @@
         <article>
             <div class="section-headline">
                 <h3>Annotations</h3>
-                <button type="button" id="add-annotation-btn" class="secondary">Ajouter à la position courante</button>
+                <button type="button" id="add-annotation-btn" class="secondary">Add at current position</button>
             </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="annotations-table">
                     <thead>
                         <tr>
-                            <th>Temps</th>
+                            <th>Time</th>
                             <th>Titre</th>
                             <th>Note</th>
                             <th>Actions</th>
@@ -194,16 +210,30 @@
 
         <article>
             <div class="section-headline">
-                <h3>Événements</h3>
+                <h3>Workflow and audit</h3>
+                <div class="mini-actions">
+                    <button type="button" id="workflow-submit-btn" class="secondary">Submit for review</button>
+                    <button type="button" id="workflow-validate-btn" class="secondary">Validate</button>
+                    <button type="button" id="workflow-lock-btn" class="secondary">Lock</button>
+                    <button type="button" id="workflow-unlock-btn" class="secondary">Unlock</button>
+                </div>
+            </div>
+            <div id="audit-output" class="integrity-box"></div>
+        </article>
+
+        <article>
+            <div class="section-headline">
+                <h3>Events</h3>
             </div>
             <div class="table-wrapper compact-table-wrapper">
                 <table id="events-table">
                     <thead>
                         <tr>
-                            <th>Temps</th>
-                            <th>Comportement</th>
+                            <th>Time</th>
+                            <th>Behavior</th>
                             <th>Type</th>
-                            <th>Modificateurs</th>
+                            <th>Subjects</th>
+                            <th>Modifiers</th>
                             <th>Commentaire</th>
                             <th>Actions</th>
                         </tr>
@@ -221,13 +251,14 @@
 {{ integrity_report|json_script:'integrity-data' }}
 {{ interval_rows|json_script:'interval-data' }}
 
-<script>
+<script nonce="{{ csp_nonce }}">
 const sessionId = {{ session.id }};
 const frameStep = Number('{{ session.frame_step_seconds }}');
 const mainVideo = document.getElementById('main-video');
 const syncVideos = [...document.querySelectorAll('.sync-video')];
 const behaviorButtons = [...document.querySelectorAll('.behavior-button')];
-const modifierButtons = [...document.querySelectorAll('.modifier-button')];
+const modifierButtons = [...document.querySelectorAll('.modifier-button:not(.subject-button)')];
+const subjectButtons = [...document.querySelectorAll('.subject-button')];
 const eventsTableBody = document.querySelector('#events-table tbody');
 const annotationsTableBody = document.querySelector('#annotations-table tbody');
 const statsTableBody = document.querySelector('#stats-table tbody');
@@ -235,6 +266,8 @@ const intervalsTableBody = document.querySelector('#intervals-table tbody');
 const summaryStrip = document.getElementById('summary-strip');
 const activeModifiersOutput = document.getElementById('active-modifiers-output');
 const activeStatesContainer = document.getElementById('active-states-container');
+const activeSubjectsOutput = document.getElementById('active-subjects-output');
+const auditOutput = document.getElementById('audit-output');
 const timelineGrid = document.getElementById('timeline-grid');
 const trackContainer = document.getElementById('track-container');
 const integrityOutput = document.getElementById('integrity-output');
@@ -247,6 +280,10 @@ const nextFrameBtn = document.getElementById('next-frame-btn');
 const clearModifiersBtn = document.getElementById('clear-modifiers-btn');
 const refreshEventsBtn = document.getElementById('refresh-events-btn');
 const addAnnotationBtn = document.getElementById('add-annotation-btn');
+const workflowSubmitBtn = document.getElementById('workflow-submit-btn');
+const workflowValidateBtn = document.getElementById('workflow-validate-btn');
+const workflowLockBtn = document.getElementById('workflow-lock-btn');
+const workflowUnlockBtn = document.getElementById('workflow-unlock-btn');
 
 function getCookie(name) {
     return document.cookie.split('; ').find((row) => row.startsWith(`${name}=`))?.split('=')[1] || '';
@@ -259,6 +296,8 @@ let trackRows = JSON.parse(document.getElementById('track-data').textContent);
 let integrityReport = JSON.parse(document.getElementById('integrity-data').textContent);
 let intervalRows = JSON.parse(document.getElementById('interval-data').textContent);
 let activeModifierIds = new Set();
+let activeSubjectIds = new Set();
+let auditRows = [];
 let syncing = false;
 
 function formatSeconds(value) {
@@ -272,9 +311,32 @@ function seekAll(seconds) {
     syncVideos.forEach((video) => { video.currentTime = t; });
 }
 
+function renderSubjectStates() {
+    const activeNames = [];
+    subjectButtons.forEach((button) => {
+        const subjectId = Number(button.dataset.subjectId);
+        const isActive = activeSubjectIds.has(subjectId);
+        button.classList.toggle('is-active-modifier', isActive);
+        if (isActive) activeNames.push(button.textContent.trim());
+    });
+    activeSubjectsOutput.textContent = activeNames.length ? `Active subjects: ${activeNames.join(' · ')}` : 'No active subjects.';
+}
+
 function renderModifierStates() {
     const activeNames = [];
-    modifierButtons.forEach((button) => {
+    subjectButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const subjectId = Number(button.dataset.subjectId);
+        if (activeSubjectIds.has(subjectId)) {
+            activeSubjectIds.delete(subjectId);
+        } else {
+            activeSubjectIds.add(subjectId);
+        }
+        renderSubjectStates();
+    });
+});
+
+modifierButtons.forEach((button) => {
         const modifierId = Number(button.dataset.modifierId);
         const isActive = activeModifierIds.has(modifierId);
         button.classList.toggle('is-active-modifier', isActive);
@@ -282,13 +344,13 @@ function renderModifierStates() {
             activeNames.push(button.textContent.trim());
         }
     });
-    activeModifiersOutput.textContent = activeNames.length ? `Actifs : ${activeNames.join(' · ')}` : 'Aucun modificateur actif.';
+    activeModifiersOutput.textContent = activeNames.length ? `Active modifiers: ${activeNames.join(' · ')}` : 'No active modifiers.';
 }
 
 function renderActiveStates() {
     const activeButtons = behaviorButtons.filter((button) => stateStatus[String(button.dataset.behaviorId)] || stateStatus[Number(button.dataset.behaviorId)]);
     if (!activeButtons.length) {
-        activeStatesContainer.innerHTML = '<span class="muted">Aucun état actif.</span>';
+        activeStatesContainer.innerHTML = '<span class="muted">No active states.</span>';
         return;
     }
     activeStatesContainer.innerHTML = activeButtons.map((button) => `
@@ -300,11 +362,11 @@ function renderActiveStates() {
 
 function renderStats(rows, summary) {
     summaryStrip.innerHTML = `
-        <span>${summary.session_event_count} événements</span>
+        <span>${summary.session_event_count} events</span>
         <span>${summary.annotation_count} annotations</span>
         <span>${summary.point_event_count} points</span>
-        <span>${summary.open_state_count} états ouverts</span>
-        <span>${formatSeconds(summary.observed_span_seconds)} observées</span>`;
+        <span>${summary.open_state_count} open states</span>
+        <span>${formatSeconds(summary.observed_span_seconds)} observed</span>`;
     statsTableBody.innerHTML = rows.map((row) => `
         <tr>
             <td><span class="behavior-badge" style="background-color:${row.color};"></span>${row.name}</td>
@@ -313,7 +375,7 @@ function renderStats(rows, summary) {
             <td>${row.segment_count}</td>
             <td>${formatSeconds(row.total_duration_seconds)}</td>
             <td>${row.occupancy_percent}</td>
-            <td>${row.is_open ? 'oui' : 'non'}</td>
+            <td>${row.is_open ? 'yes' : 'no'}</td>
         </tr>`).join('');
 }
 
@@ -352,7 +414,7 @@ function renderTracks() {
 
 function renderIntegrity() {
     if (!integrityReport.issue_count) {
-        integrityOutput.innerHTML = '<p class="muted">Aucun problème détecté.</p>';
+        integrityOutput.innerHTML = '<p class="muted">No integrity issues detected.</p>';
         return;
     }
     integrityOutput.innerHTML = `<ul class="integrity-list">${integrityReport.issues.map((item) => `<li>${item.message}</li>`).join('')}</ul>`;
@@ -375,11 +437,12 @@ function renderEvents(events) {
             <td><button type="button" class="linkish jump-button" data-seconds="${event.timestamp_seconds}">${formatSeconds(event.timestamp_seconds)}</button></td>
             <td><span class="behavior-badge" style="background-color:${event.color};"></span>${event.behavior}</td>
             <td>${event.event_kind}</td>
+            <td>${event.subjects_display || ''}</td>
             <td>${event.modifiers.map((modifier) => modifier.name).join(', ')}</td>
             <td>${event.comment || ''}</td>
             <td class="mini-actions">
-                <button type="button" class="linkish edit-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>Éditer</button>
-                <button type="button" class="linkish delete-event-btn" data-event-id="${event.id}">Supprimer</button>
+                <button type="button" class="linkish edit-event-btn" data-event='${JSON.stringify(event).replace(/'/g, '&apos;')}'>Edit</button>
+                <button type="button" class="linkish delete-event-btn" data-event-id="${event.id}">Delete</button>
             </td>
         </tr>`).join('');
 }
@@ -391,8 +454,8 @@ function renderAnnotations(annotations) {
             <td><span class="behavior-badge" style="background-color:${annotation.color};"></span>${annotation.title}</td>
             <td>${annotation.note || ''}</td>
             <td class="mini-actions">
-                <button type="button" class="linkish edit-annotation-btn" data-annotation='${JSON.stringify(annotation).replace(/'/g, '&apos;')}'>Éditer</button>
-                <button type="button" class="linkish delete-annotation-btn" data-annotation-id="${annotation.id}">Supprimer</button>
+                <button type="button" class="linkish edit-annotation-btn" data-annotation='${JSON.stringify(annotation).replace(/'/g, '&apos;')}'>Edit</button>
+                <button type="button" class="linkish delete-annotation-btn" data-annotation-id="${annotation.id}">Delete</button>
             </td>
         </tr>`).join('');
 }
@@ -406,6 +469,7 @@ async function fetchSessionState() {
     trackRows = data.track_rows;
     integrityReport = data.integrity_report;
     intervalRows = data.interval_rows;
+    auditRows = data.audit_rows || [];
     renderStats(data.stats.rows, data.stats);
     renderTimeline();
     renderTracks();
@@ -414,7 +478,17 @@ async function fetchSessionState() {
     renderActiveStates();
     renderEvents(data.events);
     renderAnnotations(data.annotations);
+    renderAudit();
 }
+
+function renderAudit() {
+    if (!auditRows.length) {
+        auditOutput.innerHTML = '<p class="muted">No audit entries yet.</p>';
+        return;
+    }
+    auditOutput.innerHTML = `<ul class="integrity-list">${auditRows.slice(0, 8).map((row) => `<li><strong>${row.action}</strong> ${row.summary} <span class="muted">${row.actor || ''}</span></li>`).join('')}</ul>`;
+}
+
 
 async function sendJSON(url, payload) {
     const response = await fetch(url, {
@@ -433,6 +507,7 @@ async function createEventForButton(button, explicitKind = null) {
         behavior_id: Number(button.dataset.behaviorId),
         timestamp_seconds: mainVideo.currentTime.toFixed(3),
         modifier_ids: [...activeModifierIds],
+        subject_ids: [...activeSubjectIds],
         event_kind: explicitKind,
     };
     await sendJSON(`{% url 'tracker:event_create_api' session.pk %}`, payload);
@@ -464,6 +539,18 @@ behaviorButtons.forEach((button) => {
     });
 });
 
+subjectButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const subjectId = Number(button.dataset.subjectId);
+        if (activeSubjectIds.has(subjectId)) {
+            activeSubjectIds.delete(subjectId);
+        } else {
+            activeSubjectIds.add(subjectId);
+        }
+        renderSubjectStates();
+    });
+});
+
 modifierButtons.forEach((button) => {
     button.addEventListener('click', () => {
         const modifierId = Number(button.dataset.modifierId);
@@ -472,7 +559,13 @@ modifierButtons.forEach((button) => {
         } else {
             activeModifierIds.add(modifierId);
         }
-        renderModifierStates();
+        workflowSubmitBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'submit'}); await fetchSessionState(); });
+workflowValidateBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'validate'}); await fetchSessionState(); });
+workflowLockBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'lock'}); await fetchSessionState(); });
+workflowUnlockBtn?.addEventListener('click', async () => { await sendJSON(`{% url 'tracker:session_workflow_action' session.pk %}`, {action: 'unlock'}); await fetchSessionState(); });
+
+renderSubjectStates();
+renderModifierStates();
     });
 });
 
@@ -500,9 +593,9 @@ clearModifiersBtn.addEventListener('click', () => { activeModifierIds = new Set(
 refreshEventsBtn.addEventListener('click', fetchSessionState);
 
 addAnnotationBtn.addEventListener('click', async () => {
-    const title = prompt('Titre de la note', 'Note');
+    const title = prompt('Annotation title', 'Note');
     if (title === null) return;
-    const note = prompt('Contenu de la note', '');
+    const note = prompt('Annotation note', '');
     await sendJSON(`{% url 'tracker:annotation_create_api' session.pk %}`, {
         timestamp_seconds: mainVideo.currentTime.toFixed(3),
         title,
@@ -518,7 +611,7 @@ document.addEventListener('click', async (event) => {
         seekAll(Number(jumpButton.dataset.seconds));
     }
     const deleteEventBtn = event.target.closest('.delete-event-btn');
-    if (deleteEventBtn && confirm('Supprimer cet événement ?')) {
+    if (deleteEventBtn && confirm('Delete this event?')) {
         await sendJSON(`/events/${deleteEventBtn.dataset.eventId}/delete/`, {});
         await fetchSessionState();
     }
@@ -526,9 +619,9 @@ document.addEventListener('click', async (event) => {
     if (editEventBtn) {
         const raw = editEventBtn.dataset.event.replace(/&apos;/g, "'");
         const eventData = JSON.parse(raw);
-        const newComment = prompt('Commentaire', eventData.comment || '');
+        const newComment = prompt('Comment', eventData.comment || '');
         if (newComment === null) return;
-        const newTime = prompt('Temps (secondes)', eventData.timestamp_seconds);
+        const newTime = prompt('Time (seconds)', eventData.timestamp_seconds);
         if (newTime === null) return;
         await sendJSON(`/events/${eventData.id}/update/`, {
             behavior_id: eventData.behavior_id,
@@ -536,11 +629,12 @@ document.addEventListener('click', async (event) => {
             event_kind: eventData.event_kind,
             comment: newComment,
             modifier_ids: eventData.modifiers.map((item) => item.id),
+            subject_ids: eventData.subjects.map((item) => item.id),
         });
         await fetchSessionState();
     }
     const deleteAnnotationBtn = event.target.closest('.delete-annotation-btn');
-    if (deleteAnnotationBtn && confirm('Supprimer cette annotation ?')) {
+    if (deleteAnnotationBtn && confirm('Delete this annotation?')) {
         await sendJSON(`/annotations/${deleteAnnotationBtn.dataset.annotationId}/delete/`, {});
         await fetchSessionState();
     }
@@ -548,11 +642,11 @@ document.addEventListener('click', async (event) => {
     if (editAnnotationBtn) {
         const raw = editAnnotationBtn.dataset.annotation.replace(/&apos;/g, "'");
         const annotation = JSON.parse(raw);
-        const title = prompt('Titre', annotation.title);
+        const title = prompt('Title', annotation.title);
         if (title === null) return;
         const note = prompt('Note', annotation.note || '');
         if (note === null) return;
-        const newTime = prompt('Temps (secondes)', annotation.timestamp_seconds);
+        const newTime = prompt('Time (seconds)', annotation.timestamp_seconds);
         if (newTime === null) return;
         await sendJSON(`/annotations/${annotation.id}/update/`, {
             timestamp_seconds: newTime,
@@ -582,6 +676,11 @@ document.addEventListener('keydown', async (event) => {
     if (event.key.toLowerCase() === 'e') {
         event.preventDefault();
         addAnnotationBtn.click();
+        return;
+    }
+    const subjectButton = subjectButtons.find((button) => button.dataset.key === event.key.toLowerCase());
+    if (subjectButton) {
+        subjectButton.click();
         return;
     }
     const modifierButton = modifierButtons.find((button) => button.dataset.key === event.key.toLowerCase());
